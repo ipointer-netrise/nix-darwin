@@ -3,7 +3,7 @@ set -euo pipefail
 
 REPO_URL="https://github.com/ipointer-netrise/nix-darwin.git"
 FLAKE_DIR="/etc/nix-darwin"
-DARWIN_CONFIG="Ivans-MacBook-Pro-2"
+DARWIN_CONFIG="default"
 
 info() { printf '\033[1;34m==> %s\033[0m\n' "$1"; }
 error() { printf '\033[1;31mError: %s\033[0m\n' "$1" >&2; exit 1; }
@@ -39,7 +39,7 @@ fi
 
 # --- Run nix-darwin switch ---
 info "Running initial darwin-rebuild switch (this may take a while)..."
-nix run nix-darwin -- switch --flake "${FLAKE_DIR}#${DARWIN_CONFIG}"
+sudo nix run nix-darwin -- switch --flake "${FLAKE_DIR}#${DARWIN_CONFIG}"
 
 info "Done! Next steps:"
 echo "  1. Open 1Password → Settings → Developer → enable 'Use the SSH Agent'"

@@ -38,5 +38,11 @@ This will:
 After editing `flake.nix`:
 
 ```sh
-darwin-rebuild switch --flake /etc/nix-darwin#Ivans-MacBook-Pro-2
+sudo darwin-rebuild switch --flake /etc/nix-darwin#default
+```
+
+Or re-run the bootstrap script — it's idempotent and will skip already-completed steps:
+
+```sh
+sudo /etc/nix-darwin/bootstrap.sh
 ```

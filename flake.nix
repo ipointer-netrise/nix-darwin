@@ -228,9 +228,7 @@ OPEOF
     };
   in
   {
-    # Build darwin flake using:
-    # $ darwin-rebuild build --flake .#Ivans-MacBook-Pro-2
-    darwinConfigurations."Ivans-MacBook-Pro-2" = nix-darwin.lib.darwinSystem {
+    darwinConfigurations.default = nix-darwin.lib.darwinSystem {
       modules = [ configuration ];
     };
   };
