@@ -29,7 +29,6 @@
             pkgs.neovim
             pkgs.obsidian
             pkgs.mas # Mac App Store CLI
-            pkgs.nerd-fonts.inconsolata
             pkgs.google-cloud-sdk
             pkgs.glab
             pkgs.tmux
@@ -55,6 +54,12 @@
 
             # LSPs
             pkgs.nil
+          ];
+
+          fonts.packages = [
+            pkgs.inconsolata
+            pkgs.open-sans
+            pkgs.nerd-fonts.inconsolata
           ];
 
           homebrew = {
