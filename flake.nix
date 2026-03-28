@@ -29,6 +29,7 @@
             # neovim
             pkgs.neovim
             pkgs.vimPlugins.LazyVim
+            pkgs.tree-sitter
 
             # LSPs
             pkgs.nil
