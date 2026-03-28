@@ -26,7 +26,13 @@
           # List packages installed in system profile. To search by name, run:
           # $ nix-env -qaP | grep wget
           environment.systemPackages = [
+            # neovim
             pkgs.neovim
+            pkgs.vimPlugins.LazyVim
+
+            # LSPs
+            pkgs.nil
+
             pkgs.obsidian
             pkgs.mas # Mac App Store CLI
             pkgs.google-cloud-sdk
@@ -44,16 +50,12 @@
             pkgs.starship
             pkgs.carapace
             pkgs.sesh
-            pkgs.vimPlugins.LazyVim
             pkgs.claude-code
             pkgs.gemini-cli
             pkgs.btop
             pkgs.chezmoi
             pkgs._1password-cli
             pkgs.devbox
-
-            # LSPs
-            pkgs.nil
           ];
 
           fonts.packages = [
@@ -168,7 +170,6 @@
           system.activationScripts.extraActivation.text =
             let
               srcZip = ./assets/keyboard-layouts/programmer-dvorak.bundle.zip;
-              srcDmg = ./assets/synergy/synergy-3.6.0-macos-arm64.dmg;
             in
             ''
               	  set -euo pipefail
@@ -201,23 +202,6 @@
 
               	  echo "Installed bundle to: $DVORAK_DST_BUNDLE"
               	  ls -la "$DVORAK_DST_BUNDLE"
-
-              	  # --- Synergy from .dmg ---
-              	  SYNERGY_APP="Synergy.app"
-              	  SYNERGY_DST="/Applications/$SYNERGY_APP"
-
-              	  if [ -d "$SYNERGY_DST" ]; then
-              	    echo "Synergy already installed at $SYNERGY_DST — skipping."
-              	  else
-              	    echo "Installing Synergy from ${srcDmg}"
-
-              	    SYNERGY_MOUNT="$(mktemp -d)"
-              	    trap 'hdiutil detach "$SYNERGY_MOUNT" -force 2>/dev/null || true; rm -rf "$SYNERGY_MOUNT" "$DVORAK_TMP"' EXIT
-
-              	    hdiutil attach "${srcDmg}" -nobrowse -readonly -mountpoint "$SYNERGY_MOUNT"
-              	    cp -R "$SYNERGY_MOUNT/$SYNERGY_APP" "$SYNERGY_DST"
-              	    echo "Installed $SYNERGY_APP to $SYNERGY_DST"
-              	  fi
               	'';
 
           system.defaults = {
