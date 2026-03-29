@@ -28,6 +28,9 @@
           environment.systemPackages = [
             # tmux
             pkgs.tmux
+            pkgs.tmuxPlugins.catppuccin
+            pkgs.tmuxPlugins.cpu
+            pkgs.tmuxPlugins.battery
 
             # neovim
             pkgs.neovim
@@ -64,6 +67,9 @@
           ];
 
           environment.variables.ZSH_VI_MODE_PATH = "${pkgs.zsh-vi-mode}/share/zsh-vi-mode";
+          environment.variables.CATPPUCCIN_TMUX_PATH = "${pkgs.tmuxPlugins.catppuccin.rtp}";
+          environment.variables.TMUX_CPU_PATH = "${pkgs.tmuxPlugins.cpu.rtp}";
+          environment.variables.TMUX_BATTERY_PATH = "${pkgs.tmuxPlugins.battery.rtp}";
 
           fonts.packages = [
             pkgs.inconsolata
