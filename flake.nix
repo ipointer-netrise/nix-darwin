@@ -26,6 +26,9 @@
           # List packages installed in system profile. To search by name, run:
           # $ nix-env -qaP | grep wget
           environment.systemPackages = [
+            # tmux
+            pkgs.tmux
+
             # neovim
             pkgs.neovim
             pkgs.vimPlugins.LazyVim
@@ -38,7 +41,6 @@
             pkgs.mas # Mac App Store CLI
             pkgs.google-cloud-sdk
             pkgs.glab
-            pkgs.tmux
             pkgs.jq
             pkgs.ripgrep
             pkgs.fd
@@ -57,7 +59,10 @@
             pkgs.chezmoi
             pkgs._1password-cli
             pkgs.devbox
+            pkgs.zsh-vi-mode
           ];
+
+          environment.variables.ZSH_VI_MODE_PATH = "${pkgs.zsh-vi-mode}/share/zsh-vi-mode";
 
           fonts.packages = [
             pkgs.inconsolata
