@@ -32,6 +32,7 @@
             # neovim
             pkgs.neovim
             pkgs.vimPlugins.LazyVim
+            pkgs.vimPlugins.vim-tmux-navigator
             pkgs.tree-sitter
 
             # LSPs
