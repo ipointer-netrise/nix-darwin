@@ -41,6 +41,8 @@
             # LSPs
             pkgs.nil
 
+            pkgs.wget
+            pkgs.bat
             pkgs.obsidian
             pkgs.mas # Mac App Store CLI
             pkgs.google-cloud-sdk
@@ -52,6 +54,7 @@
             pkgs.atuin
             pkgs.zoxide
             pkgs.git
+            pkgs.lazygit
             pkgs.jujutsu
             pkgs.eza
             pkgs.starship
@@ -132,6 +135,7 @@
           };
 
           security.pam.services.sudo_local.touchIdAuth = true;
+          security.pam.services.sudo_local.reattach = true;
 
           # System-level git config: rewrite GitLab HTTPS to SSH
           # Lives at /etc/gitconfig — below ~/.gitconfig so chezmoi can layer on top
