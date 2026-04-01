@@ -34,14 +34,15 @@
 
             # neovim
             pkgs.neovim
-            pkgs.vimPlugins.LazyVim
-            pkgs.vimPlugins.vim-tmux-navigator
             pkgs.tree-sitter
 
             # LSPs
             pkgs.nil
+            pkgs.gopls
 
+            pkgs.go
             pkgs.wget
+            pkgs.grpcurl
             pkgs.bat
             pkgs.obsidian
             pkgs.mas # Mac App Store CLI
@@ -56,6 +57,7 @@
             pkgs.git
             pkgs.lazygit
             pkgs.jujutsu
+            pkgs.lazyjj
             pkgs.eza
             pkgs.starship
             pkgs.carapace
@@ -67,6 +69,8 @@
             pkgs._1password-cli
             pkgs.devbox
             pkgs.zsh-vi-mode
+            pkgs.tmatrix
+            pkgs.raycast
           ];
 
           environment.variables.ZSH_VI_MODE_PATH = "${pkgs.zsh-vi-mode}/share/zsh-vi-mode";
@@ -105,6 +109,9 @@
               "elgato-stream-deck"
               "snagit"
               "warp"
+              "raycast"
+              "finicky"
+              "zed"
             ];
             masApps = {
               "Amphetamine" = 937984704;
@@ -225,6 +232,8 @@
             NSGlobalDomain = {
               AppleKeyboardUIMode = 3;
             };
+
+            controlcenter.Sound = true;
 
             CustomUserPreferences = {
 
