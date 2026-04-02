@@ -37,9 +37,9 @@
             pkgs.neovim
             pkgs.tree-sitter
 
-            # LSPs
-            pkgs.nil
-            pkgs.gopls
+            # Mason LSP dependencies
+            pkgs.nodejs
+            pkgs.cargo
 
             pkgs.go
             pkgs.wget
@@ -73,6 +73,9 @@
             pkgs.raycast
             pkgs.lua5_1
             pkgs.luarocks
+
+            # AI
+            pkgs.aichat
           ];
 
           environment.variables.CATPPUCCIN_TMUX_PATH = "${pkgs.tmuxPlugins.catppuccin.rtp}";
