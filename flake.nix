@@ -22,6 +22,7 @@
         in
         {
           nixpkgs.config.allowUnfree = true;
+          # profile = "/nix/etc-darwin";
 
           # List packages installed in system profile. To search by name, run:
           # $ nix-env -qaP | grep wget
@@ -68,12 +69,12 @@
             pkgs.chezmoi
             pkgs._1password-cli
             pkgs.devbox
-            pkgs.zsh-vi-mode
             pkgs.tmatrix
             pkgs.raycast
+            pkgs.lua5_1
+            pkgs.luarocks
           ];
 
-          environment.variables.ZSH_VI_MODE_PATH = "${pkgs.zsh-vi-mode}/share/zsh-vi-mode";
           environment.variables.CATPPUCCIN_TMUX_PATH = "${pkgs.tmuxPlugins.catppuccin.rtp}";
           environment.variables.TMUX_CPU_PATH = "${pkgs.tmuxPlugins.cpu.rtp}";
           environment.variables.TMUX_BATTERY_PATH = "${pkgs.tmuxPlugins.battery.rtp}";
@@ -228,13 +229,16 @@
               	  ls -la "$DVORAK_DST_BUNDLE"
               	'';
 
+          # https://nix-darwin.github.io/nix-darwin/manual/
           system.defaults = {
             NSGlobalDomain = {
               AppleKeyboardUIMode = 3;
             };
 
             controlcenter.Sound = true;
+            controlcenter.Bluetooth = true;
 
+            hitoolbox.AppleFnUsageType = "Change Input Source";
             CustomUserPreferences = {
 
               "com.apple.HIToolbox" = {
@@ -254,7 +258,27 @@
             };
 
             dock.autohide = true;
+            dock.autohide-delay = 0.16;
+            dock.autohide-time-modifier = 1.5;
+            dock.expose-animation-duration = 1.5;
+            dock.expose-group-apps = true;
+            dock.magnification = true;
+            dock.largesize = 48;
             dock.tilesize = 36;
+            dock.mru-spaces = false;
+            dock.scroll-to-open = true;
+            dock.show-recents = false;
+            dock.showAppExposeGestureEnabled = true;
+            dock.showLaunchpadGestureEnabled = true;
+            dock.showMissionControlGestureEnabled = true;
+
+            # Hot corners on the desktop
+            # 1:Disabled 2:MissionControl 3:ApplicationWindows 4:Desktop 5:StartScreenSaver 6:DisableScreenSaver 7:Dashboard 10:PutDisplayToSleep 11:Launchpad 12:NotificationCenter 13:LockScreen 14:QuickNote
+            # dock.wvous-bl-corner
+            # dock.wvous-br-corner
+            # dock.wvous-tl-corner
+            # dock.wvous-tr-corner
+
             dock.persistent-apps = [
               "/Applications/1Password.app"
               "/Applications/Ghostty.app"
@@ -268,8 +292,38 @@
               "/Applications/Spotify.app"
               "/Applications/Raindrop.io.app"
             ];
+
             finder.FXPreferredViewStyle = "clmv";
+            finder.FXDefaultSearchScope = "SCcf";
+            finder.FXEnableExtensionChangeWarning = false;
+            finder.NewWindowTarget = "Home";
+            finder.ShowPathbar = true;
+            finder.ShowStatusBar = true;
+            finder._FXShowPosixPathInTitle = true;
+            finder._FXSortFoldersFirst = true;
+
+            iCal.CalendarSidebarShown = true;
+            iCal."TimeZone support enabled" = true;
+
             loginwindow.LoginwindowText = "Ivan + NetRise = ❤️";
+            loginwindow.GuestEnabled = false;
+            loginwindow.autoLoginUser = primaryUser;
+
+            menuExtraClock.Show24Hour = true;
+            menuExtraClock.ShowDate = 1;
+
+            spaces.spans-displays = false;
+
+            trackpad.TrackpadFourFingerHorizSwipeGesture = 2; # 0:disable 2:enable
+            trackpad.TrackpadFourFingerPinchGesture = 2;
+            trackpad.TrackpadFourFingerVertSwipeGesture = 2;
+            trackpad.TrackpadPinch = true;
+            trackpad.TrackpadRightClick = true;
+            trackpad.TrackpadRotate = true;
+            trackpad.TrackpadThreeFingerDrag = true;
+            trackpad.TrackpadThreeFingerHorizSwipeGesture = 1; # 0:disable 1:pages 2:full-screen-apps # NOTE: four-finger swipe for apps is enabled, freeing three-finger for pages...
+            trackpad.TrackpadTwoFingerFromRightEdgeSwipeGesture = 3; # 0:disable 3:notification-center
+
           };
         };
     in
