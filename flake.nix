@@ -73,9 +73,12 @@
             pkgs.raycast
             pkgs.lua5_1
             pkgs.luarocks
+            pkgs.mark # Publish markdown to confluence
+            
 
             # AI
             pkgs.aichat
+            pkgs.opencode
           ];
 
           environment.variables.CATPPUCCIN_TMUX_PATH = "${pkgs.tmuxPlugins.catppuccin.rtp}";
@@ -116,6 +119,7 @@
               "raycast"
               "finicky"
               "zed"
+              "cmux"
             ];
             masApps = {
               "Amphetamine" = 937984704;
