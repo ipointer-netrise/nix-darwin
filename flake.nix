@@ -74,11 +74,17 @@
             pkgs.lua5_1
             pkgs.luarocks
             pkgs.mark # Publish markdown to confluence
-            
+            pkgs.fswatch
+            pkgs.watchexec
+            pkgs.gotestfmt
+            pkgs.gum
 
             # AI
             pkgs.aichat
             pkgs.opencode
+
+            # CLI Clients
+            pkgs.acli # Atlassian
           ];
 
           environment.variables.CATPPUCCIN_TMUX_PATH = "${pkgs.tmuxPlugins.catppuccin.rtp}";
@@ -120,6 +126,7 @@
               "finicky"
               "zed"
               "cmux"
+              "bettertouchtool"
             ];
             masApps = {
               "Amphetamine" = 937984704;
