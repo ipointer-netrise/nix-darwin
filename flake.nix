@@ -255,6 +255,12 @@
             hitoolbox.AppleFnUsageType = "Change Input Source";
             CustomUserPreferences = {
 
+              # Disable Universal Control (built-in keyboard/mouse sharing between
+              # Macs/iPads). Synergy handles this instead and the two conflict.
+              "com.apple.universalcontrol" = {
+                Disable = true;
+              };
+
               "com.apple.HIToolbox" = {
                 AppleEnabledInputSources = [
                   {
