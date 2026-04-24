@@ -82,6 +82,7 @@
             # AI
             pkgs.aichat
             pkgs.opencode
+            pkgs.pi-coding-agent
 
             # CLI Clients
             pkgs.acli # Atlassian
@@ -127,6 +128,8 @@
               "zed"
               "cmux"
               "bettertouchtool"
+              "figma"
+              "hex-fiend"
             ];
             masApps = {
               "Amphetamine" = 937984704;
@@ -257,9 +260,9 @@
 
               # Disable Universal Control (built-in keyboard/mouse sharing between
               # Macs/iPads). Synergy handles this instead and the two conflict.
-              "com.apple.universalcontrol" = {
-                Disable = true;
-              };
+              # "com.apple.universalcontrol" = {
+              #   Disable = true;
+              # };
 
               "com.apple.HIToolbox" = {
                 AppleEnabledInputSources = [
