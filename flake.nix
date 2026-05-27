@@ -19,6 +19,75 @@
         let
           primaryUser = "ivanpointer";
           homeDir = "/Users/${primaryUser}";
+
+          # ── Declarative global npm CLIs ──────────────────────────────
+          # Add { package, bin } entries to npmGlobals. Each entry will
+          # be installed/updated to the latest version on every
+          # `darwin-rebuild switch`, and its binary symlinked into
+          # /usr/local/bin. Versions live in ~/.local/share/npm-globals/.
+          mkNpmGlobal =
+            { package, bin }:
+            ''
+              # --- npm global: ${package} (${bin}) ---
+              PREFIX="${homeDir}/.local/share/npm-globals/${bin}"
+              BIN="$PREFIX/node_modules/.bin/${bin}"
+
+              mkdir -p "$PREFIX"
+              chown -R ${primaryUser}:staff "${homeDir}/.local"
+              # npm cache must be user-owned (root-run npm can clobber it)
+              if [ -d "${homeDir}/.npm" ]; then
+                chown -R ${primaryUser}:staff "${homeDir}/.npm"
+              fi
+
+              # npm install is idempotent when already at latest; let it
+              # be the source of truth rather than shelling out for a
+              # version check.
+              echo "Ensuring ${package}@latest..."
+              sudo -u ${primaryUser} \
+                HOME="${homeDir}" \
+                PATH="${pkgs.nodejs}/bin:$PATH" \
+                ${pkgs.nodejs}/bin/npm install \
+                  --prefix "$PREFIX" \
+                  --no-audit --no-fund --silent \
+                  "${package}@latest"
+
+              mkdir -p /usr/local/bin
+              ln -sf "$BIN" /usr/local/bin/${bin}
+            '';
+
+          npmGlobals = [
+            {
+              package = "@earendil-works/pi-coding-agent";
+              bin = "pi";
+            }
+            {
+              package = "opencode-ai";
+              bin = "opencode";
+            }
+          ];
+
+          # ── Declarative pi-coding-agent packages ─────────────────────
+          # Pi packages (extensions/skills/themes) are managed via
+          # `pi install npm:<name>`, which records them in
+          # ~/.pi/agent/settings.json under `packages`. We make this
+          # declarative here so a fresh machine gets the same set.
+          mkPiPackage = pkg: ''
+            # --- pi package: ${pkg} ---
+            PI_SETTINGS="${homeDir}/.pi/agent/settings.json"
+            if [ ! -f "$PI_SETTINGS" ] || ! ${pkgs.jq}/bin/jq -e \
+                --arg p "npm:${pkg}" \
+                '(.packages // []) | index($p)' "$PI_SETTINGS" >/dev/null 2>&1; then
+              echo "Ensuring pi package ${pkg}..."
+              sudo -u ${primaryUser} \
+                HOME="${homeDir}" \
+                PATH="${pkgs.nodejs}/bin:/usr/local/bin:$PATH" \
+                /usr/local/bin/pi install "npm:${pkg}" || true
+            fi
+          '';
+
+          piPackages = [
+            "pi-mcp-adapter"
+          ];
         in
         {
           nixpkgs.config.allowUnfree = true;
@@ -81,12 +150,17 @@
 
             # AI
             pkgs.aichat
-            pkgs.opencode
-            pkgs.pi-coding-agent
+            # opencode is installed via npm in the postActivation script
+            # below (see npmGlobals / system.activationScripts.postActivation).
+            # pi-coding-agent is installed via npm in the postActivation
+            # script below (see system.activationScripts.postActivation).
+            pkgs.codex
 
             # CLI Clients
             pkgs.acli # Atlassian
           ];
+
+          environment.systemPath = [ "/opt/homebrew/bin" "/opt/homebrew/sbin" ];
 
           environment.variables.CATPPUCCIN_TMUX_PATH = "${pkgs.tmuxPlugins.catppuccin.rtp}";
           environment.variables.TMUX_CPU_PATH = "${pkgs.tmuxPlugins.cpu.rtp}";
@@ -100,6 +174,16 @@
 
           homebrew = {
             enable = true;
+            taps = [
+              "auth0/auth0-cli"
+              "hashicorp/tap"
+              "raine/workmux"
+            ];
+            brews = [
+              "auth0/auth0-cli/auth0"
+              "hashicorp/tap/packer"
+              "raine/workmux/workmux"
+            ];
             casks = [
               "1password"
               "google-chrome"
@@ -113,6 +197,7 @@
               "docker-desktop"
               "chatgpt"
               "claude"
+              "codex-app"
               "tg-pro"
               "raindropio"
               "bartender"
@@ -130,6 +215,13 @@
               "bettertouchtool"
               "figma"
               "hex-fiend"
+              "microsoft-office"
+              "microsoft-edge"
+              "firefox"
+              "vivaldi"
+              "audacity"
+              "openchamber"
+              "jetbrains-toolbox"
             ];
             masApps = {
               "Amphetamine" = 937984704;
@@ -207,6 +299,12 @@
                       chown ${primaryUser}:staff "$OP_AGENT_TOML"
                       echo "Enforced 1Password agent.toml vault = SSH Credentials"
                     fi
+
+                    # --- Global npm CLIs (declared in npmGlobals above) ---
+                    ${pkgs.lib.concatMapStrings mkNpmGlobal npmGlobals}
+
+                    # --- Pi packages (declared in piPackages above) ---
+                    ${pkgs.lib.concatMapStrings mkPiPackage piPackages}
           '';
 
           system.activationScripts.extraActivation.text =
