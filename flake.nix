@@ -162,6 +162,9 @@
 
             # CLI Clients
             pkgs.acli # Atlassian
+
+            # Infrastructure as code
+            pkgs.terraform
           ];
 
           environment.systemPath = [ "/opt/homebrew/bin" "/opt/homebrew/sbin" ];
