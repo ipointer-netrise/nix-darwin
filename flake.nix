@@ -64,6 +64,10 @@
               package = "opencode-ai";
               bin = "opencode";
             }
+            {
+              package = "@a5c-ai/babysitter-opencode";
+              bin = "babysitter-opencode";
+            }
           ];
 
           # ── Declarative pi-coding-agent packages ─────────────────────
