@@ -229,6 +229,7 @@
               "audacity"
               "openchamber"
               "jetbrains-toolbox"
+              "todoist"
             ];
             masApps = {
               "Amphetamine" = 937984704;
@@ -259,7 +260,16 @@
           };
 
           security.pam.services.sudo_local.touchIdAuth = true;
+          security.pam.services.sudo_local.watchIdAuth = true;
           security.pam.services.sudo_local.reattach = true;
+          # The module concatenates touchIdAuth before watchIdAuth, but PAM
+          # `sufficient` lines are tried top-down — first match wins. Force
+          # Watch ahead of Touch ID so the watch is the primary prompt.
+          security.pam.services.sudo_local.text = pkgs.lib.mkForce ''
+            auth       optional       ${pkgs.pam-reattach}/lib/pam/pam_reattach.so
+            auth       sufficient     ${pkgs.pam-watchid}/lib/pam_watchid.so
+            auth       sufficient     pam_tid.so
+          '';
 
           # System-level git config: rewrite GitLab HTTPS to SSH
           # Lives at /etc/gitconfig — below ~/.gitconfig so chezmoi can layer on top
