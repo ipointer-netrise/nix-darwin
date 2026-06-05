@@ -230,6 +230,7 @@
               "openchamber"
               "jetbrains-toolbox"
               "todoist"
+              "zen"
             ];
             masApps = {
               "Amphetamine" = 937984704;
