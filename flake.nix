@@ -229,7 +229,7 @@
               "audacity"
               "openchamber"
               "jetbrains-toolbox"
-              "todoist"
+              "todoist-app"
               "zen"
             ];
             masApps = {
