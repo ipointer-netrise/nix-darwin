@@ -231,6 +231,7 @@
               "jetbrains-toolbox"
               "todoist-app"
               "zen"
+              "blender"
             ];
             masApps = {
               "Amphetamine" = 937984704;
