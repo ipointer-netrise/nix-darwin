@@ -92,6 +92,44 @@
           piPackages = [
             "pi-mcp-adapter"
           ];
+
+          # ── Declarative uv-tool CLIs ─────────────────────────────────
+          # Python CLIs distributed on PyPI, installed via `uv tool
+          # install --upgrade`. uv manages an isolated venv per tool and
+          # auto-fetches a compatible managed CPython, so no system
+          # Python is required. The tool's bin lands in ~/.local/bin and
+          # is symlinked into /usr/local/bin (mirrors mkNpmGlobal).
+          mkUvTool =
+            { package, bin }:
+            ''
+              # --- uv tool: ${package} (${bin}) ---
+              chown -R ${primaryUser}:staff "${homeDir}/.local" || true
+
+              echo "Ensuring ${package}@latest via uv tool..."
+              sudo -u ${primaryUser} \
+                HOME="${homeDir}" \
+                PATH="${pkgs.uv}/bin:$PATH" \
+                ${pkgs.uv}/bin/uv tool install --upgrade "${package}"
+
+              mkdir -p /usr/local/bin
+              ln -sf "${homeDir}/.local/bin/${bin}" /usr/local/bin/${bin}
+            '';
+
+          uvTools = [
+            {
+              package = "hermes-agent";
+              bin = "hermes";
+            }
+          ];
+
+          # ── Firecrawl (self-hosted, docker compose) ──────────────────
+          # Cloned to ${firecrawlDir}, run as a launchd user agent so it
+          # starts on login (Docker Desktop is per-user, so a system
+          # daemon won't have a socket to talk to). The .env is only
+          # bootstrapped if missing — edit it in place to set secrets
+          # like OPENAI_API_KEY or rotate BULL_AUTH_KEY.
+          firecrawlDir = "${homeDir}/.local/share/firecrawl";
+          firecrawlRepo = "https://github.com/firecrawl/firecrawl.git";
         in
         {
           nixpkgs.config.allowUnfree = true;
@@ -113,6 +151,10 @@
             # Mason LSP dependencies
             pkgs.nodejs
             pkgs.cargo
+
+            # uv: Python tooling (used by uvTools, e.g. hermes-agent)
+            pkgs.uv
+            pkgs.ffmpeg # optional hermes TTS dependency
 
             pkgs.go
             pkgs.wget
@@ -232,12 +274,17 @@
               "todoist-app"
               "zen"
               "blender"
+              "discord"
             ];
             masApps = {
               "Amphetamine" = 937984704;
             };
 
             onActivation.cleanup = "zap";
+            # Homebrew 5.1+ refuses `brew bundle --cleanup` without an
+            # explicit force flag; pass it so non-interactive activation
+            # doesn't abort.
+            onActivation.extraFlags = [ "--force-cleanup" ];
           };
 
           # Necessary for using flakes on this system.
@@ -324,7 +371,62 @@
 
                     # --- Pi packages (declared in piPackages above) ---
                     ${pkgs.lib.concatMapStrings mkPiPackage piPackages}
+
+                    # --- uv-tool CLIs (declared in uvTools above) ---
+                    ${pkgs.lib.concatMapStrings mkUvTool uvTools}
+
+                    # --- Firecrawl repo + .env bootstrap ---
+                    FIRECRAWL_DIR="${firecrawlDir}"
+                    sudo -u ${primaryUser} mkdir -p "$(dirname "$FIRECRAWL_DIR")"
+                    if [ ! -d "$FIRECRAWL_DIR/.git" ]; then
+                      echo "Cloning firecrawl into $FIRECRAWL_DIR..."
+                      sudo -u ${primaryUser} ${pkgs.git}/bin/git clone --depth 1 \
+                        ${firecrawlRepo} "$FIRECRAWL_DIR"
+                    else
+                      echo "Updating firecrawl in $FIRECRAWL_DIR..."
+                      sudo -u ${primaryUser} ${pkgs.git}/bin/git -C "$FIRECRAWL_DIR" \
+                        pull --ff-only --quiet || \
+                        echo "  (skipped; resolve manually if needed)"
+                    fi
+
+                    if [ ! -f "$FIRECRAWL_DIR/.env" ]; then
+                      cat > "$FIRECRAWL_DIR/.env" << 'FIRECRAWL_ENV_EOF'
+            PORT=3002
+            HOST=0.0.0.0
+            USE_DB_AUTHENTICATION=false
+            BULL_AUTH_KEY=CHANGEME
+            OPENAI_API_KEY=
+            FIRECRAWL_ENV_EOF
+                      chown ${primaryUser}:staff "$FIRECRAWL_DIR/.env"
+                      echo "Bootstrapped $FIRECRAWL_DIR/.env — edit to set secrets."
+                    fi
           '';
+
+          # Firecrawl runs as a per-user launchd agent (not a system
+          # daemon) because Docker Desktop is per-user — the docker
+          # socket only exists once the user has logged in. The agent
+          # waits for Docker via KeepAlive; if `docker compose up` exits
+          # (e.g. socket not ready yet), launchd restarts it on the
+          # ThrottleInterval until Docker Desktop is up.
+          launchd.user.agents.firecrawl = {
+            serviceConfig = {
+              Label = "io.firecrawl.local";
+              ProgramArguments = [
+                "/bin/sh"
+                "-c"
+                "exec /usr/local/bin/docker compose up"
+              ];
+              WorkingDirectory = firecrawlDir;
+              RunAtLoad = true;
+              KeepAlive = true;
+              ThrottleInterval = 30;
+              StandardOutPath = "${homeDir}/Library/Logs/firecrawl.log";
+              StandardErrorPath = "${homeDir}/Library/Logs/firecrawl.err.log";
+              EnvironmentVariables = {
+                PATH = "/usr/local/bin:/usr/bin:/bin";
+              };
+            };
+          };
 
           system.activationScripts.extraActivation.text =
             let
