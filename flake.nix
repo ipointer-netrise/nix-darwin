@@ -117,7 +117,11 @@
 
           uvTools = [
             {
-              package = "hermes-agent";
+              # [all] pulls in every optional extra (mcp, messaging,
+              # voice, vision, etc.). [mcp] alone would suffice for the
+              # Open Brain integration but [all] matches what `hermes
+              # doctor` recommends and keeps connectors available.
+              package = "hermes-agent[all]";
               bin = "hermes";
             }
           ];
