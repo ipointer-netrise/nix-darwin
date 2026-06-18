@@ -100,7 +100,10 @@
           # Python is required. The tool's bin lands in ~/.local/bin and
           # is symlinked into /usr/local/bin (mirrors mkNpmGlobal).
           mkUvTool =
-            { package, bin }:
+            { package, bin, withPackages ? [ ] }:
+            let
+              withFlags = pkgs.lib.concatMapStringsSep " " (p: "--with ${pkgs.lib.escapeShellArg p}") withPackages;
+            in
             ''
               # --- uv tool: ${package} (${bin}) ---
               chown -R ${primaryUser}:staff "${homeDir}/.local" || true
@@ -109,7 +112,7 @@
               sudo -u ${primaryUser} \
                 HOME="${homeDir}" \
                 PATH="${pkgs.uv}/bin:$PATH" \
-                ${pkgs.uv}/bin/uv tool install --upgrade "${package}"
+                ${pkgs.uv}/bin/uv tool install --upgrade ${withFlags} "${package}"
 
               mkdir -p /usr/local/bin
               ln -sf "${homeDir}/.local/bin/${bin}" /usr/local/bin/${bin}
@@ -123,6 +126,30 @@
               # doctor` recommends and keeps connectors available.
               package = "hermes-agent[all]";
               bin = "hermes";
+              # The following Python deps are NOT pulled by
+              # hermes-agent[all] — they're in Hermes' lazy-install
+              # allowlist (see tools/lazy_deps.py) and only get installed
+              # when the feature is first used. We inject them here so:
+              #   * sounddevice — needs system PortAudio (pkgs.portaudio
+              #     above); declarative install matches the system lib.
+              #   * numpy — sounddevice runtime dep.
+              #   * faster-whisper — `/voice on` STT backend. Its lazy
+              #     prompt gets swallowed by the CLI's rendering layer
+              #     and hangs the session, so we pre-install.
+              #   * anthropic — native Anthropic SDK (provider=anthropic
+              #     paths). Used by the agent default model.
+              #   * edge-tts — default TTS backend for `/voice tts`.
+              # `uv tool install --upgrade --with X` does a clean
+              # re-resolve, so any lazy-installed dep not listed here
+              # gets pruned on every `make apply`. Add to this list any
+              # Hermes feature you want sticky across rebuilds.
+              withPackages = [
+                "sounddevice"
+                "numpy"
+                "faster-whisper"
+                "anthropic"
+                "edge-tts"
+              ];
             }
           ];
 
@@ -134,6 +161,7 @@
           # like OPENAI_API_KEY or rotate BULL_AUTH_KEY.
           firecrawlDir = "${homeDir}/.local/share/firecrawl";
           firecrawlRepo = "https://github.com/firecrawl/firecrawl.git";
+          secondBrainDir = "${homeDir}/Source/personal/second-brain";
         in
         {
           nixpkgs.config.allowUnfree = true;
@@ -159,6 +187,7 @@
             # uv: Python tooling (used by uvTools, e.g. hermes-agent)
             pkgs.uv
             pkgs.ffmpeg # optional hermes TTS dependency
+            pkgs.portaudio # hermes voice mode: PortAudio C library for sounddevice Python bindings
 
             pkgs.go
             pkgs.wget
@@ -236,6 +265,9 @@
               "auth0/auth0-cli/auth0"
               "hashicorp/tap/packer"
               "raine/workmux/workmux"
+              # macmon 0.7.2+ required for M5 Pro — nixpkgs has 0.6.1 which
+              # panics on M5 Pro's IOReport channels. See ADR 0013.
+              "macmon"
             ];
             casks = [
               "1password"
@@ -245,6 +277,7 @@
               "yubico-authenticator"
               "zoom"
               "ghostty"
+              "hammerspoon"
               "slack"
               "ollama-app"
               "docker-desktop"
@@ -429,6 +462,28 @@
               EnvironmentVariables = {
                 PATH = "/usr/local/bin:/usr/bin:/bin";
               };
+            };
+          };
+
+          # macmon-exporter: Apple Silicon GPU/CPU/temp/power → Prometheus text
+          # on :9101. Prometheus scrapes it via host.docker.internal:9101.
+          # Reads IOReport without sudo (same interface btop uses). See ADR 0013.
+          launchd.user.agents.macmon-exporter = {
+            serviceConfig = {
+              Label = "com.neocortex.macmon-exporter";
+              ProgramArguments = [
+                "${pkgs.python3}/bin/python3"
+                "${secondBrainDir}/scripts/macmon_exporter.py"
+              ];
+              EnvironmentVariables = {
+                # macmon lives in /opt/homebrew/bin (installed via homebrew.brews)
+                PATH = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin";
+              };
+              RunAtLoad = true;
+              KeepAlive = true;
+              ThrottleInterval = 10;
+              StandardOutPath = "${homeDir}/Library/Logs/macmon-exporter.log";
+              StandardErrorPath = "${homeDir}/Library/Logs/macmon-exporter.log";
             };
           };
 
