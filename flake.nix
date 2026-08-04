@@ -204,6 +204,9 @@
             pkgs.portaudio # hermes voice mode: PortAudio C library for sounddevice Python bindings
 
             pkgs.go
+            # Keeps linting reproducible across rebuilds; a `go install`ed
+            # golangci-lint drifts ahead of CI and reports findings CI won't.
+            pkgs.golangci-lint
             pkgs.wget
             pkgs.grpcurl
             pkgs.bat
