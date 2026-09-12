@@ -68,6 +68,22 @@
               package = "@a5c-ai/babysitter-opencode";
               bin = "babysitter-opencode";
             }
+            {
+              # Not pkgs.codex: nixpkgs typically trails codex releases by
+              # a week or more (0.147 vs 0.149 upstream at time of writing).
+              # npm tracks upstream same-day, at the cost of the version no
+              # longer being pinned by flake.lock.
+              package = "@openai/codex";
+              bin = "codex";
+            }
+            {
+              # Graft (github.com/trailhq/Graft) ships only under the
+              # @nanonets scope. The unscoped `graft` on npm is an
+              # unrelated, abandoned microservices lib -- don't "fix"
+              # this by dropping the scope.
+              package = "@nanonets/graft";
+              bin = "graft";
+            }
           ];
 
           # ── Declarative pi-coding-agent packages ─────────────────────
@@ -229,7 +245,11 @@
             pkgs.carapace
             pkgs.sesh
             pkgs.claude-code
-            pkgs.gemini-cli
+            # Replaces pkgs.gemini-cli: Google cut Gemini CLI off for the
+            # free/Pro/Ultra tiers on 2026-06-18, and nixpkgs flags it
+            # meta.problems.removal. Stays on nix rather than npm because
+            # the `antigravity-cli` on npm is an unrelated v0.0.1 squat.
+            pkgs.antigravity-cli
             pkgs.btop
             pkgs.chezmoi
             pkgs._1password-cli
@@ -250,7 +270,8 @@
             # below (see npmGlobals / system.activationScripts.postActivation).
             # pi-coding-agent is installed via npm in the postActivation
             # script below (see system.activationScripts.postActivation).
-            pkgs.codex
+            # codex is also npm-managed (see npmGlobals) so it tracks
+            # upstream releases rather than the nixpkgs pin.
 
             # CLI Clients
             pkgs.acli # Atlassian
@@ -267,6 +288,7 @@
 
           fonts.packages = [
             pkgs.inconsolata
+            pkgs.monaspace
             pkgs.open-sans
             pkgs.nerd-fonts.inconsolata
           ];
@@ -311,6 +333,7 @@
               "raycast"
               "finicky"
               "zed"
+              "visual-studio-code"
               "cmux"
               "bettertouchtool"
               "figma"
@@ -447,11 +470,13 @@
                     sudo -u ${primaryUser} mkdir -p "$(dirname "$FIRECRAWL_DIR")"
                     if [ ! -d "$FIRECRAWL_DIR/.git" ]; then
                       echo "Cloning firecrawl into $FIRECRAWL_DIR..."
-                      sudo -u ${primaryUser} ${pkgs.git}/bin/git clone --depth 1 \
+                      sudo -u ${primaryUser} HOME="${homeDir}" \
+                        ${pkgs.git}/bin/git clone --depth 1 \
                         ${firecrawlRepo} "$FIRECRAWL_DIR"
                     else
                       echo "Updating firecrawl in $FIRECRAWL_DIR..."
-                      sudo -u ${primaryUser} ${pkgs.git}/bin/git -C "$FIRECRAWL_DIR" \
+                      sudo -u ${primaryUser} HOME="${homeDir}" \
+                        ${pkgs.git}/bin/git -C "$FIRECRAWL_DIR" \
                         pull --ff-only --quiet || \
                         echo "  (skipped; resolve manually if needed)"
                     fi
@@ -566,11 +591,26 @@
             hitoolbox.AppleFnUsageType = "Change Input Source";
             CustomUserPreferences = {
 
-              # Disable Universal Control (built-in keyboard/mouse sharing between
-              # Macs/iPads). Synergy handles this instead and the two conflict.
-              # "com.apple.universalcontrol" = {
-              #   Disable = true;
-              # };
+              # Universal Control: Apple's built-in keyboard/mouse sharing
+              # between nearby Macs/iPads signed into the same Apple ID.
+              # Requires Handoff (below), Bluetooth+Wi-Fi, and 2FA on the
+              # Apple ID. The three keys mirror the Displays → Advanced UI:
+              #   Disable=0             → feature on
+              #   DisableMagicEdges=0   → cursor crosses display edges
+              #   DisableAutoDiscovery=0 → auto-link nearby devices
+              "com.apple.universalcontrol" = {
+                Disable = 0;
+                DisableMagicEdges = 0;
+                DisableAutoDiscovery = 0;
+              };
+
+              # Handoff — Universal Control refuses to link without it.
+              # Both advertising (this Mac visible to peers) and receiving
+              # (accept sessions from peers) must be on.
+              "com.apple.coreservices.useractivityd" = {
+                ActivityAdvertisingAllowed = true;
+                ActivityReceivingAllowed = true;
+              };
 
               "com.apple.HIToolbox" = {
                 AppleEnabledInputSources = [
