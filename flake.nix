@@ -291,6 +291,10 @@
             pkgs.monaspace
             pkgs.open-sans
             pkgs.nerd-fonts.inconsolata
+            # Glyphs only, no Latin: safe as a fallback behind MonoLisa,
+            # which has Powerline but no Devicons/Seti/Material/Octicons.
+            # A fully-patched font here would shadow MonoLisa's letterforms.
+            pkgs.nerd-fonts.symbols-only
           ];
 
           homebrew = {
