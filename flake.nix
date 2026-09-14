@@ -134,6 +134,21 @@
               || echo "  (aven skill install failed; run manually)"
           '';
 
+          # ── aven sync daemon ─────────────────────────────────────────
+          # Without the LaunchAgent, aven only syncs when you run `aven sync`
+          # by hand -- `sync.interval_seconds` in config.yaml does nothing.
+          # `aven daemon install` is idempotent and rewrites the plist with the
+          # current binary path, so re-running keeps it correct across upgrades.
+          mkAvenDaemon = ''
+            # --- aven sync daemon (LaunchAgent) ---
+            echo "Ensuring aven sync daemon..."
+            sudo -u ${primaryUser} \
+              HOME="${homeDir}" \
+              PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" \
+              /opt/homebrew/bin/aven daemon install \
+              || echo "  (aven daemon install failed; run manually)"
+          '';
+
           # ── Declarative uv-tool CLIs ─────────────────────────────────
           # Python CLIs distributed on PyPI, installed via `uv tool
           # install --upgrade`. uv manages an isolated venv per tool and
@@ -496,6 +511,8 @@
                     ${pkgs.lib.concatMapStrings mkPiPackage piPackages}
 
                     ${mkAvenSkill}
+
+                    ${mkAvenDaemon}
 
                     # --- uv-tool CLIs (declared in uvTools above) ---
                     ${pkgs.lib.concatMapStrings mkUvTool uvTools}

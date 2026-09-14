@@ -140,6 +140,19 @@ aven sync status
 aven doctor      # the Sync section should show enabled / server configured
 ```
 
+## How the client config is managed
+
+`~/.config/aven/config.yaml` is **managed by chezmoi**, not by this repo, at
+`dot_config/aven/modify_private_config.yaml.tmpl` in the dotfiles repo. It is a
+`modify_` script rather than a static file: aven owns most of that document and
+adds keys across releases, so chezmoi enforces only the `sync:` block and passes
+everything else through. The token is pulled from 1Password with
+`onepasswordRead`, so it never lands in either repo.
+
+The sync **daemon** is installed declaratively by this flake
+(`mkAvenDaemon` in `flake.nix`, run from `postActivation`). Without it aven only
+syncs when you run `aven sync` by hand — `interval_seconds` has no effect.
+
 ## Seeding the server from an existing machine
 
 The server starts empty. To carry existing tasks over, enable sync on the machine
