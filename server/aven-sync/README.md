@@ -32,14 +32,36 @@ expect heavy image attachments, size up or lower `quota_bytes` in
 `/etc/aven/config.yaml`.
 
 ```sh
-doctl auth init                     # once, with a DO API token from 1Password
-doctl compute droplet create aven-sync \
-  --image ubuntu-24-04-x64 \
-  --size s-1vcpu-1gb \
-  --region nyc3 \
-  --ssh-keys "$(doctl compute ssh-key list --format ID --no-header | head -1)" \
-  --wait
-doctl compute droplet list aven-sync
+./provision-droplet.sh
+```
+
+`provision-droplet.sh` reads the API token from 1Password at invocation time and
+passes it to `doctl` through the environment only. It deliberately does **not**
+run `doctl auth init`, which would persist the token in plaintext at
+`~/.config/doctl/config.yaml`. The script is idempotent — if the droplet already
+exists it prints the IP and exits.
+
+Override any default with an environment variable:
+
+| Variable | Default |
+|---|---|
+| `OP_TOKEN_REF` | `op://Personal/DigitalOcean - Aven Setup API Token/password` |
+| `DROPLET_NAME` | `aven-sync` |
+| `DROPLET_SIZE` | `s-1vcpu-1gb` |
+| `DROPLET_IMAGE` | `ubuntu-24-04-x64` |
+| `DROPLET_REGION` | `nyc3` |
+| `SSH_KEY_NAME` | *(unset — uses all registered keys)* |
+
+**Prerequisite: register an SSH key with DigitalOcean first.** Without one, DO
+provisions the droplet with an emailed root password instead of key auth, and
+the installer can't reach it. Add a public key under *Settings → Security → SSH
+Keys* in the console, or re-mint the token with the `ssh_key: create` scope and
+use `doctl compute ssh-key import`. To keep a dedicated key in 1Password rather
+than reusing a Git key:
+
+```sh
+op item create --category 'SSH Key' --title 'Aven Sync Droplet SSH Key' \
+  --vault 'SSH Credentials' --ssh-generate-key ed25519
 ```
 
 **2. Install and connect Tailscale** on the droplet:
@@ -101,6 +123,22 @@ aven doctor      # the Sync section should show enabled / server configured
 The server starts empty. To carry existing tasks over, enable sync on the machine
 that already has them **first** and let it push a full cycle before enabling sync
 anywhere else. Confirm with `aven sync status` that pending changes reach zero.
+
+## Secrets
+
+Nothing secret is committed to this repo.
+
+| Secret | Where it lives | How it is read |
+|---|---|---|
+| DigitalOcean API token | 1Password, `Personal` vault | `op read` at invocation; env-only, never on disk |
+| aven `sync.auth_token` | Generated on the server into `/etc/aven/config.yaml` (`0640 root:aven`) | Printed once by `install.sh` — save it to 1Password |
+| Droplet SSH key | 1Password, `SSH Credentials` vault | 1Password SSH agent |
+
+The aven sync token has to be literal in each client's
+`~/.config/aven/config.yaml` — aven reads it only from that file and exposes no
+environment variable for it (there is `AVEN_SYNC_SERVER`, but no
+`AVEN_SYNC_AUTH_TOKEN`). Keep the canonical copy in 1Password and treat the
+client file as a deployed artifact, not the source of truth.
 
 ## Operations
 
