@@ -85,7 +85,12 @@ info "Exposing on the tailnet via tailscale serve..."
 tailscale serve --bg --https=443 "http://127.0.0.1:${AVEN_PORT}" \
   || error "tailscale serve failed. Enable HTTPS certificates and MagicDNS in the Tailscale admin console, then re-run."
 
-HOSTNAME_TS="$(tailscale status --json | grep -o '"DNSName":"[^"]*"' | head -1 | cut -d'"' -f4 | sed 's/\.$//')"
+# `tailscale status --json` pretty-prints as `"DNSName": "host.tailnet.ts.net."`
+# -- the space after the colon matters, and an unmatched grep would abort the
+# whole script under `set -o pipefail`.
+HOSTNAME_TS="$(tailscale status --json \
+  | grep -oE '"DNSName": *"[^"]*"' | head -1 | cut -d'"' -f4 | sed 's/\.$//' || true)"
+[[ -n "$HOSTNAME_TS" ]] || HOSTNAME_TS="<your-host>.<your-tailnet>.ts.net"
 TOKEN_OUT="$(grep "auth_token:" "$CONFIG_DIR/config.yaml" | sed "s/.*auth_token: *'\(.*\)'/\1/")"
 
 cat <<EOF

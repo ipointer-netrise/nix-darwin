@@ -92,6 +92,18 @@ to 1Password** — it is the only credential protecting the server.
 cloud firewall that drops public inbound except what you need, and reach the box
 over the tailnet instead.
 
+## Adding another machine
+
+Any device that should sync must be **on the tailnet** — the server is reachable
+only there, by design. There is no public endpoint to fall back on.
+
+1. Install Tailscale and join the same tailnet (same login identity).
+   - macOS managed by this flake: already installed; just `tailscale up`.
+   - Other Linux/Windows/macOS: <https://tailscale.com/download>
+   - iOS/Android: the Tailscale app, then aven's `aven sync pair`.
+2. Install aven.
+3. Apply the client config below (same `server_url` and `auth_token`).
+
 ## Client setup
 
 On each Mac (Tailscale is already installed by the flake via
