@@ -20,9 +20,16 @@ that is reachable only over Tailscale.
 
 ## Provision
 
-**1. Create the droplet.** Ubuntu 24.04 LTS, Basic / Regular, 1 GB RAM — the
-smallest tier is ample for a Rust binary and a SQLite file. Pick a region near
-you; sync is chatty but tiny.
+**1. Create the droplet.** Ubuntu 24.04 LTS x64, Basic / Regular,
+`s-1vcpu-1gb` ($6/mo: 1 vCPU, 1 GiB RAM, 25 GB SSD). Pick a region near you;
+sync payloads are tiny.
+
+Don't drop to the $4 tier to save $2. Its disk is 10 GB, but aven's *default*
+attachment quota is 10 GiB (`local.attachment_lifecycle.quota_bytes`) plus
+0.5 GiB of previews — you would fill the disk before aven ever enforced its own
+quota. 25 GB leaves room for attachments, the OS, and apt upgrades. If you
+expect heavy image attachments, size up or lower `quota_bytes` in
+`/etc/aven/config.yaml`.
 
 ```sh
 doctl auth init                     # once, with a DO API token from 1Password
