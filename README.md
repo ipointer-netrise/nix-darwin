@@ -13,7 +13,10 @@ Declarative macOS system configuration using [nix-darwin](https://github.com/nix
   npm/uv activation scripts (see `npmGlobals` / `uvTools` in `flake.nix`)
 - Installs the `aven` coding-agent skill for Claude Code, OpenCode, Codex, Pi, and
   Hermes (the first four via `aven skill install`; Hermes by mirroring the generated
-  file, since aven's installer doesn't know about it)
+  file, since aven's installer doesn't know about it).
+  antigravity-cli (`agy`) needs no entry of its own: it discovers skills from
+  `~/.claude/skills` (verified with `fs_usage` -- it also probes `~/.agents/skills`
+  and `~/.copilot/skills`), so it picks up the Claude Code copy already.
 - Runs the Tailscale daemon (`services.tailscale.enable`); `tailscale up` still needs
   one interactive login per machine
 
