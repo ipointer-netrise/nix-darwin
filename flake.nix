@@ -204,12 +204,20 @@
           firecrawlRepo = "https://github.com/firecrawl/firecrawl.git";
           secondBrainDir = "${homeDir}/Source/personal/second-brain";
 
-          # ── Homebrew taps + trust ────────────────────────────────────
-          # Homebrew 5.x sets HOMEBREW_REQUIRE_TAP_TRUST by default and
-          # refuses to load formulae from any tap not listed in
-          # ~/.homebrew/trust.json. We declare taps once here and write
-          # the trust file ourselves in preActivation so a fresh machine
-          # doesn't need a manual `brew trust <tap>` step.
+          # ── Homebrew taps ────────────────────────────────────────────
+          # Homebrew 6.0 turned on HOMEBREW_REQUIRE_TAP_TRUST by default:
+          # formulae from non-official taps refuse to load until trusted.
+          # nix-darwin already handles this -- homebrew.brews.*.trusted
+          # defaults to true, appending `trusted: true` to each Brewfile
+          # line, and `brew bundle` persists those entries (see
+          # bundle/installer.rb) *before* it installs, so a fresh machine
+          # needs no manual `brew trust`.
+          #
+          # Footgun: do NOT hand-write ~/.homebrew/trust.json to solve
+          # this. `--force-cleanup` invokes Homebrew::Trust.replace!,
+          # which rebuilds the file from Brewfile-derived entries only
+          # and silently drops every key it did not generate (a
+          # hand-written `trustedtaps` vanishes on each activation).
           brewTaps = [
             "auth0/auth0-cli"
             "chainguard-dev/tap"
@@ -217,7 +225,6 @@
             "raine/aven"
             "raine/workmux"
           ];
-          brewTrustJson = builtins.toJSON { trustedtaps = brewTaps; };
         in
         {
           nixpkgs.config.allowUnfree = true;
@@ -434,22 +441,6 @@
           '';
 
           system.primaryUser = primaryUser;
-
-          # Pre-trust homebrew taps declared above. Runs before the
-          # nix-darwin homebrew activation so `brew bundle` won't refuse
-          # to load formulae from a fresh tap on a new machine.
-          # ${homeDir}/.homebrew/trust.json is owned by the primary user;
-          # we (re)write it on every switch so taps stay in sync with
-          # `brewTaps`.
-          system.activationScripts.preActivation.text = ''
-            TRUST_DIR="${homeDir}/.homebrew"
-            sudo -u ${primaryUser} mkdir -p "$TRUST_DIR"
-            cat > "$TRUST_DIR/trust.json" <<'BREW_TRUST_EOF'
-            ${brewTrustJson}
-            BREW_TRUST_EOF
-            chown ${primaryUser}:staff "$TRUST_DIR/trust.json"
-            chmod 644 "$TRUST_DIR/trust.json"
-          '';
 
           # Bootstrap SSH + 1Password config (only if missing)
           # Once chezmoi runs, it owns these files
