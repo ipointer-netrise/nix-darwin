@@ -311,6 +311,7 @@
 
             # Infrastructure as code
             pkgs.terraform
+            pkgs.doctl # DigitalOcean CLI (aven sync droplet -- see server/aven-sync/)
           ];
 
           environment.systemPath = [ "/opt/homebrew/bin" "/opt/homebrew/sbin" ];
@@ -399,6 +400,15 @@
             # doesn't abort.
             onActivation.extraFlags = [ "--force-cleanup" ];
           };
+
+          # Tailscale: private overlay network. Carries aven sync traffic to
+          # the self-hosted server (see server/aven-sync/) without exposing it
+          # publicly -- aven ships no TLS of its own.
+          #
+          # This runs the open-source tailscaled daemon, not the GUI cask, so
+          # it is reproducible from the flake. `tailscale up` still needs an
+          # interactive browser login once per machine.
+          services.tailscale.enable = true;
 
           # Necessary for using flakes on this system.
           nix.settings.experimental-features = "nix-command flakes";

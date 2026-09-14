@@ -1,0 +1,38 @@
+[Unit]
+Description=aven sync server
+Documentation=https://aven.raine.dev/
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aven
+Group=aven
+Environment=AVEN_CONFIG_DIR=/etc/aven
+Environment=AVEN_NO_UPDATE_CHECK=1
+
+# Bind loopback only. Tailnet exposure is handled by `tailscale serve`, which
+# also terminates TLS -- aven ships no TLS of its own. Binding the tailnet
+# address directly would work too, but 100.64.0.0/10 is CGNAT rather than
+# RFC1918, so aven may classify it as a public bind and demand
+# --unsafe-public-bind. Loopback avoids that question entirely.
+ExecStart=/usr/local/bin/aven server --data /var/lib/aven/db.sqlite --bind 127.0.0.1:3000
+
+Restart=always
+RestartSec=5
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/aven
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

@@ -12,6 +12,8 @@ Declarative macOS system configuration using [nix-darwin](https://github.com/nix
 - Installs CLI tooling that isn't in nixpkgs via Homebrew taps (e.g. `aven`) and via
   npm/uv activation scripts (see `npmGlobals` / `uvTools` in `flake.nix`)
 - Installs the `aven` coding-agent skill for Claude Code, OpenCode, Codex, and Pi
+- Runs the Tailscale daemon (`services.tailscale.enable`); `tailscale up` still needs
+  one interactive login per machine
 
 ## Bootstrap a new Mac
 
@@ -46,6 +48,8 @@ moved by hand when migrating to a new machine.
 
 Every task, note, and attachment lives in one local SQLite database. There is no hosted
 sync service — sync is self-hosted only — so nothing leaves the machine on its own.
+For continuous multi-device sync, see [`server/aven-sync/`](server/aven-sync/), which
+provisions a Tailscale-only sync server on a DigitalOcean droplet.
 
 **Footgun:** most of the data is usually sitting in the write-ahead log
 (`db.sqlite-wal`), not in `db.sqlite`. Copying `db.sqlite` alone will silently lose
