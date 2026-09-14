@@ -9,6 +9,9 @@ Declarative macOS system configuration using [nix-darwin](https://github.com/nix
 - Sets up `/etc/gitconfig` to rewrite GitLab HTTPS URLs to SSH
 - Bootstraps `~/.config/1Password/ssh/agent.toml` for the correct vault
 - Configures system preferences (dock, keyboard layouts, Touch ID sudo, etc.)
+- Installs CLI tooling that isn't in nixpkgs via Homebrew taps (e.g. `aven`) and via
+  npm/uv activation scripts (see `npmGlobals` / `uvTools` in `flake.nix`)
+- Installs the `aven` coding-agent skill for Claude Code, OpenCode, Codex, and Pi
 
 ## Bootstrap a new Mac
 
@@ -32,6 +35,40 @@ This will:
    ```sh
    chezmoi init --apply git@gitlab.com:netrise/ivan/dotfiles.git
    ```
+4. Restore any data listed under [Data this repo does *not* carry](#data-this-repo-does-not-carry)
+
+## Data this repo does not carry
+
+`darwin-rebuild` reproduces *tools and configuration*, not *state*. These have to be
+moved by hand when migrating to a new machine.
+
+### aven tasks
+
+Every task, note, and attachment lives in one local SQLite database. There is no hosted
+sync service — sync is self-hosted only — so nothing leaves the machine on its own.
+
+**Footgun:** most of the data is usually sitting in the write-ahead log
+(`db.sqlite-wal`), not in `db.sqlite`. Copying `db.sqlite` alone will silently lose
+almost everything. Use SQLite's `.backup`, which checkpoints the WAL into one
+consistent file:
+
+```sh
+# On the old machine
+sqlite3 ~/.local/state/aven/db.sqlite ".backup '$HOME/aven-backup.sqlite'"
+
+# On the new machine, after bootstrap and after quitting any aven TUI/daemon
+mkdir -p ~/.local/state/aven
+cp ~/aven-backup.sqlite ~/.local/state/aven/db.sqlite
+aven doctor   # confirms schema version and task count
+```
+
+Also copy `~/.config/aven/config.yaml` if it exists (it is only created once you run
+`aven config init` or set a value; defaults are used otherwise).
+
+### firecrawl secrets
+
+`~/.local/share/firecrawl/.env` is bootstrapped with placeholders on a fresh machine.
+Re-set `BULL_AUTH_KEY` and `OPENAI_API_KEY` from 1Password.
 
 ## Applying changes
 
