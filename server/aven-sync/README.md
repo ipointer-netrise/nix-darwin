@@ -88,9 +88,19 @@ auth token is generated once and preserved across re-runs.
 The script prints the client config block when it finishes. **Save the auth token
 to 1Password** — it is the only credential protecting the server.
 
-**4. Lock down SSH (optional but recommended).** Once Tailscale works, add a DO
-cloud firewall that drops public inbound except what you need, and reach the box
-over the tailnet instead.
+**4. Public access is closed automatically.** `install.sh` enables `ufw` with
+default-deny inbound, allowing only the `tailscale0` interface and UDP 41641
+(direct peer connections; without it Tailscale falls back to DERP relays). After
+it runs, port 22 is unreachable from the internet — reach the box over the
+tailnet:
+
+```sh
+ssh root@aven-sync.<your-tailnet>.ts.net
+```
+
+Set `SKIP_FIREWALL=1` to opt out. This is a host firewall rather than a DO cloud
+firewall so it needs no extra API token scope; if you lock yourself out, DO's web
+recovery console still works.
 
 ## Adding another machine
 

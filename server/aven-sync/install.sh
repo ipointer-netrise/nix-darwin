@@ -79,6 +79,22 @@ systemctl enable --now aven-sync.service
 systemctl is-active --quiet aven-sync.service \
   || error "aven-sync failed to start. Inspect: journalctl -u aven-sync -n 50"
 
+# --- Host firewall: tailnet-only inbound ---
+# Safe to enable unconditionally here: this script already refused to run
+# unless `tailscale status` succeeded, and the tailscale0 rule goes in before
+# the default-deny takes effect, so tailnet SSH survives. Set SKIP_FIREWALL=1
+# to opt out.
+if [[ "${SKIP_FIREWALL:-0}" != "1" ]] && command -v ufw >/dev/null; then
+  info "Restricting inbound traffic to the tailnet..."
+  ufw default deny incoming >/dev/null
+  ufw default allow outgoing >/dev/null
+  ufw allow in on tailscale0 >/dev/null
+  # Without this Tailscale still works, but falls back to DERP relays.
+  ufw allow 41641/udp comment "tailscale direct" >/dev/null
+  ufw --force enable >/dev/null
+  info "Public SSH is now closed; reach this host over the tailnet."
+fi
+
 # --- Expose on the tailnet with TLS ---
 # `tailscale serve` terminates TLS using the tailnet cert; aven has none.
 info "Exposing on the tailnet via tailscale serve..."
