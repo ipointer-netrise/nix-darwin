@@ -730,7 +730,6 @@
               "/Applications/Google Chrome.app"
               "/Applications/ChatGPT.app"
               "/Applications/Claude.app"
-              "/Applications/Warp.app"
               "/Applications/Spotify.app"
               "/Applications/Raindrop.io.app"
             ];
