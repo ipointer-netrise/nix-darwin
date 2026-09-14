@@ -132,6 +132,25 @@
               /opt/homebrew/bin/aven skill install \
               ${pkgs.lib.concatMapStringsSep " " (a: "--agent ${a}") avenSkillAgents} \
               || echo "  (aven skill install failed; run manually)"
+
+            # Hermes is a fifth harness aven doesn't know about -- `--agent`
+            # accepts only claude/opencode/codex/pi -- but it reads the same
+            # SKILL.md format from ~/.hermes/skills/<category>/<name>/. Mirror
+            # the file aven just generated rather than committing a copy, so
+            # the text tracks the installed aven version and there is no
+            # frontmatter duplicated here to drift.
+            #
+            # chezmoi owns ~/.hermes/skills, but none of those directories are
+            # exact_, so this unmanaged skill survives `chezmoi apply`.
+            AVEN_SRC="${homeDir}/.claude/skills/aven/SKILL.md"
+            AVEN_HERMES="${homeDir}/.hermes/skills/workflows/aven"
+            if [ -f "$AVEN_SRC" ]; then
+              sudo -u ${primaryUser} mkdir -p "$AVEN_HERMES"
+              sudo -u ${primaryUser} cp "$AVEN_SRC" "$AVEN_HERMES/SKILL.md"
+              echo "Ensured aven skill for Hermes at $AVEN_HERMES/SKILL.md"
+            else
+              echo "  (skipped Hermes aven skill; $AVEN_SRC missing)"
+            fi
           '';
 
           # ── aven sync daemon ─────────────────────────────────────────
