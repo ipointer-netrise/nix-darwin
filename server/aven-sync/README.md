@@ -107,51 +107,107 @@ recovery console still works.
 Any device that should sync must be **on the tailnet** — the server is reachable
 only there, by design. There is no public endpoint to fall back on.
 
-1. Install Tailscale and join the same tailnet (same login identity).
-   - macOS managed by this flake: already installed; just `tailscale up`.
-   - Other Linux/Windows/macOS: <https://tailscale.com/download>
-   - iOS/Android: the Tailscale app, then aven's `aven sync pair`.
-2. Install aven.
-3. Apply the client config below (same `server_url` and `auth_token`).
+This repo is public, so the real tailnet hostname and the auth token are not
+written here. Both live in the 1Password item **`Aven Sync Auth Token`**
+(`Personal` vault): the token in the `password` field, the URL in `server_url`.
 
-## Client setup
+### Path A — a Mac managed by this flake
 
-On each Mac (Tailscale is already installed by the flake via
-`services.tailscale.enable`; run `tailscale up` once to log in):
+Almost everything is automatic. Run the [bootstrap](../../README.md#bootstrap-a-new-mac),
+then:
 
 ```sh
-aven config init      # only if ~/.config/aven/config.yaml does not exist yet
+tailscale up                                    # interactive browser login
+chezmoi init --apply git@gitlab.com:netrise/ivan/dotfiles.git
 ```
 
-Then set the `sync:` block to the values the installer printed:
+That is the whole client setup. The flake installs aven, Tailscale, and the sync
+daemon; chezmoi writes `~/.config/aven/config.yaml` with the token pulled from
+1Password. Skip to [Verify](#verify).
+
+> `chezmoi apply` needs `op` signed in (`eval $(op signin)`), or the token
+> renders empty and sync silently fails to authenticate.
+
+### Path B — any other machine
+
+For anything not managed by this flake (another Linux box, a work laptop, a
+machine you do not control):
+
+**1. Join the tailnet** — the same tailnet, same login identity.
+<https://tailscale.com/download>. On iOS/Android use the Tailscale app, then
+`aven sync pair` instead of the steps below.
+
+**2. Install aven** — <https://github.com/raine/aven>:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/raine/aven/main/scripts/install | bash
+```
+
+**3. Configure sync.** Create the config if absent, then set the `sync:` block.
+Read both values out of 1Password — do not copy them from a chat log or a
+ticket:
+
+```sh
+aven config init      # only if ~/.config/aven/config.yaml does not exist
+op read "op://Personal/Aven Sync Auth Token/server_url"
+op read "op://Personal/Aven Sync Auth Token/password"
+```
 
 ```yaml
 sync:
   enabled: true
-  server_url: "https://aven-sync.<your-tailnet>.ts.net"
+  server_url: "<server_url from 1Password>"
   interval_seconds: 30
-  auth_token: '<token from 1Password>'
+  auth_token: '<password from 1Password>'
 ```
 
-Verify:
+Then `chmod 600 ~/.config/aven/config.yaml` — it now holds a credential.
+
+**4. Install the sync daemon.** Easy to miss, and nothing works on a timer
+without it:
 
 ```sh
-aven sync status
-aven doctor      # the Sync section should show enabled / server configured
+aven daemon install
 ```
 
-## How the client config is managed
+Without the daemon aven syncs *only* when you run `aven sync` by hand;
+`interval_seconds` has no effect at all. This is the single most common reason a
+new machine looks configured but never actually syncs.
 
-`~/.config/aven/config.yaml` is **managed by chezmoi**, not by this repo, at
+### Verify
+
+```sh
+tailscale status | grep aven-sync    # the server should be listed
+aven sync                            # expect: complete=true
+aven sync status                     # expect: Sync: healthy
+aven daemon status                   # expect: Daemon: healthy, running yes
+```
+
+`aven sync status` reporting `degraded` immediately after setup usually just
+means no sync has run yet — run `aven sync` once and re-check.
+
+To prove it end to end, create a task on one machine and confirm it appears on
+another after a sync. Note that checking the **server** is misleading: the
+server stores only the change log, so `select count(*) from tasks` on
+`/var/lib/aven/db.sqlite` stays at 0 by design. Tasks are materialized
+client-side.
+
+## How the client config is managed on flake-managed Macs
+
+`~/.config/aven/config.yaml` is owned by **chezmoi**, not by this repo, at
 `dot_config/aven/modify_private_config.yaml.tmpl` in the dotfiles repo. It is a
 `modify_` script rather than a static file: aven owns most of that document and
-adds keys across releases, so chezmoi enforces only the `sync:` block and passes
-everything else through. The token is pulled from 1Password with
+adds keys across releases, so a static file would freeze those defaults and
+fight aven on every upgrade. The script enforces only the `sync:` block and
+passes everything else through. The token comes from 1Password via
 `onepasswordRead`, so it never lands in either repo.
 
-The sync **daemon** is installed declaratively by this flake
-(`mkAvenDaemon` in `flake.nix`, run from `postActivation`). Without it aven only
-syncs when you run `aven sync` by hand — `interval_seconds` has no effect.
+Edit it with `chezmoi edit ~/.config/aven/config.yaml` — a direct edit is
+clobbered on the next `chezmoi apply`.
+
+The sync **daemon** is installed declaratively by this flake (`mkAvenDaemon` in
+`flake.nix`, run from `postActivation`), so flake-managed Macs get step 4 for
+free.
 
 ## Seeding the server from an existing machine
 
