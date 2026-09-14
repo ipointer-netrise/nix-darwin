@@ -109,6 +109,31 @@
             "pi-mcp-adapter"
           ];
 
+          # ── aven coding-agent skill ──────────────────────────────────
+          # `aven skill install` drops the task-workflow skill into each
+          # agent's config tree (~/.claude/skills, etc). Agents are named
+          # explicitly rather than relying on aven's auto-detection so a
+          # fresh machine installs the full set deterministically. This
+          # must run after mkNpmGlobal -- opencode/codex/pi don't exist
+          # until those npm installs complete, and aven skips agents it
+          # can't find.
+          avenSkillAgents = [
+            "claude"
+            "opencode"
+            "codex"
+            "pi"
+          ];
+          mkAvenSkill = ''
+            # --- aven coding-agent skill ---
+            echo "Ensuring aven agent skill..."
+            sudo -u ${primaryUser} \
+              HOME="${homeDir}" \
+              PATH="/opt/homebrew/bin:/usr/local/bin:${pkgs.nodejs}/bin:$PATH" \
+              /opt/homebrew/bin/aven skill install \
+              ${pkgs.lib.concatMapStringsSep " " (a: "--agent ${a}") avenSkillAgents} \
+              || echo "  (aven skill install failed; run manually)"
+          '';
+
           # ── Declarative uv-tool CLIs ─────────────────────────────────
           # Python CLIs distributed on PyPI, installed via `uv tool
           # install --upgrade`. uv manages an isolated venv per tool and
@@ -189,6 +214,7 @@
             "auth0/auth0-cli"
             "chainguard-dev/tap"
             "hashicorp/tap"
+            "raine/aven"
             "raine/workmux"
           ];
           brewTrustJson = builtins.toJSON { trustedtaps = brewTaps; };
@@ -304,6 +330,8 @@
               "auth0/auth0-cli/auth0"
               "chainguard-dev/tap/chainctl"
               "hashicorp/tap/packer"
+              # Not in nixpkgs; upstream ships a tap (same author as workmux).
+              "raine/aven/aven"
               "raine/workmux/workmux"
               # macmon 0.7.2+ required for M5 Pro — nixpkgs has 0.6.1 which
               # panics on M5 Pro's IOReport channels. See ADR 0013.
@@ -465,6 +493,8 @@
 
                     # --- Pi packages (declared in piPackages above) ---
                     ${pkgs.lib.concatMapStrings mkPiPackage piPackages}
+
+                    ${mkAvenSkill}
 
                     # --- uv-tool CLIs (declared in uvTools above) ---
                     ${pkgs.lib.concatMapStrings mkUvTool uvTools}
