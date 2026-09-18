@@ -168,6 +168,32 @@
               || echo "  (aven daemon install failed; run manually)"
           '';
 
+          # ── Figma Dev Mode MCP server ────────────────────────────────
+          # Declared here rather than in chezmoi's modify_dot_claude.json.tmpl
+          # because it's paired with the figma cask above: Figma's own Dev
+          # Mode MCP server (Preferences → Enable local MCP Server) is what
+          # answers on 127.0.0.1:3845, so the entry belongs next to the thing
+          # that provides it. Same idempotent-merge shape as chezmoi's
+          # goland entry: skip if already present, no trailing newline (see
+          # modify_dot_claude.json.tmpl for why).
+          mkFigmaMcp = ''
+            # --- Figma Dev Mode MCP server ---
+            echo "Ensuring Figma Dev Mode MCP server in ~/.claude.json..."
+            CLAUDE_JSON="${homeDir}/.claude.json"
+            EXISTING=$(sudo -u ${primaryUser} cat "$CLAUDE_JSON" 2>/dev/null || true)
+            [ -n "$EXISTING" ] || EXISTING='{}'
+            UPDATED=$(printf '%s' "$EXISTING" | ${pkgs.jq}/bin/jq '
+              .mcpServers = (.mcpServers // {}) |
+              if .mcpServers["figma-dev-mode-mcp-server"] then . else
+                .mcpServers["figma-dev-mode-mcp-server"] = {
+                  type: "http",
+                  url: "http://127.0.0.1:3845/mcp"
+                }
+              end
+            ')
+            sudo -u ${primaryUser} sh -c 'printf "%s" "$1" > "$2"' -- "$UPDATED" "$CLAUDE_JSON"
+          '';
+
           # ── Declarative uv-tool CLIs ─────────────────────────────────
           # Python CLIs distributed on PyPI, installed via `uv tool
           # install --upgrade`. uv manages an isolated venv per tool and
@@ -532,6 +558,8 @@
                     ${mkAvenSkill}
 
                     ${mkAvenDaemon}
+
+                    ${mkFigmaMcp}
 
                     # --- uv-tool CLIs (declared in uvTools above) ---
                     ${pkgs.lib.concatMapStrings mkUvTool uvTools}
