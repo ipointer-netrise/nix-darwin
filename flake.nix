@@ -439,6 +439,7 @@
               "hex-fiend"
               "microsoft-office"
               "microsoft-edge"
+              "microsoft-teams"
               "firefox"
               "vivaldi"
               "audacity"
@@ -448,6 +449,9 @@
               "zen"
               "blender"
               "discord"
+              "ankerwork"
+              "farrago"
+              "loopback"
             ];
             masApps = {
               "Amphetamine" = 937984704;
