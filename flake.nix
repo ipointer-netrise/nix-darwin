@@ -413,7 +413,6 @@
               "yubico-authenticator"
               "zoom"
               "ghostty"
-              "hammerspoon"
               "slack"
               "ollama-app"
               "docker-desktop"
