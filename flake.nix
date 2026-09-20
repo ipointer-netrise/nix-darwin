@@ -414,6 +414,9 @@
               "zoom"
               "ghostty"
               "slack"
+              # Official slackapi CLI; `slack api` is a Web API passthrough.
+              # nixpkgs' slack-cli is the unrelated, archived rockymadden tool.
+              "slack-cli"
               "ollama-app"
               "docker-desktop"
               "chatgpt"
