@@ -318,6 +318,7 @@
             pkgs.golangci-lint
             pkgs.wget
             pkgs.grpcurl
+            pkgs.ngrok
             pkgs.bat
             pkgs.obsidian
             pkgs.mas # Mac App Store CLI
