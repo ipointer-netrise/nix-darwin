@@ -319,6 +319,11 @@
             pkgs.wget
             pkgs.grpcurl
             pkgs.ngrok
+            # Provides the `playwright` CLI. Its browsers come from
+            # PLAYWRIGHT_BROWSERS_PATH below and are version-locked to this
+            # package; a project pinning a different @playwright/test will not
+            # find its browser revision there.
+            pkgs.playwright-test
             pkgs.bat
             pkgs.obsidian
             pkgs.mas # Mac App Store CLI
@@ -380,6 +385,7 @@
           environment.variables.CATPPUCCIN_TMUX_PATH = "${pkgs.tmuxPlugins.catppuccin.rtp}";
           environment.variables.TMUX_CPU_PATH = "${pkgs.tmuxPlugins.cpu.rtp}";
           environment.variables.TMUX_BATTERY_PATH = "${pkgs.tmuxPlugins.battery.rtp}";
+          environment.variables.PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
 
           fonts.packages = [
             pkgs.inconsolata
