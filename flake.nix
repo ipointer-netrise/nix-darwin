@@ -86,6 +86,27 @@
             }
           ];
 
+          # ── graft crux-id patch ──────────────────────────────────────
+          # graft lists crux targets as `- id=<id> | <kind> | ...` with no end-delimiter, so the model echoes the whole
+          # line back as the id; graft matches by exact id, misses every node, and drops good summaries as
+          # "empty-parsed". Normalising at the first pipe recovers them. Reapplied on each switch because mkNpmGlobal
+          # reinstalls @latest. Affects @nanonets/graft 0.19.0 and 0.20.0; drop this once upstream fixes it.
+          mkGraftCruxPatch = ''
+            # --- graft crux-id patch ---
+            GRAFT_CRUX="${homeDir}/.local/share/npm-globals/graft/node_modules/@nanonets/graft/dist/ai/crux.js"
+            if [ -f "$GRAFT_CRUX" ]; then
+              if ${pkgs.gnugrep}/bin/grep -q 'graft-patch' "$GRAFT_CRUX"; then
+                :
+              elif ${pkgs.gnugrep}/bin/grep -q '^        id: s.id,$' "$GRAFT_CRUX"; then
+                ${pkgs.gnused}/bin/sed -i 's#^        id: s.id,$#        id: String(s.id).split(" | ")[0].trim(), // graft-patch#' "$GRAFT_CRUX"
+                chown ${primaryUser}:staff "$GRAFT_CRUX"
+                echo "Applied graft crux-id patch"
+              else
+                echo "  (graft crux-id patch skipped: upstream shape changed -- recheck whether it is still needed)"
+              fi
+            fi
+          '';
+
           # ── Declarative pi-coding-agent packages ─────────────────────
           # Pi packages (extensions/skills/themes) are managed via
           # `pi install npm:<name>`, which records them in
@@ -564,6 +585,8 @@
 
                     # --- Global npm CLIs (declared in npmGlobals above) ---
                     ${pkgs.lib.concatMapStrings mkNpmGlobal npmGlobals}
+
+                    ${mkGraftCruxPatch}
 
                     # --- Pi packages (declared in piPackages above) ---
                     ${pkgs.lib.concatMapStrings mkPiPackage piPackages}
