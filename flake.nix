@@ -86,24 +86,36 @@
             }
           ];
 
-          # ── graft crux-id patch ──────────────────────────────────────
-          # graft lists crux targets as `- id=<id> | <kind> | ...` with no end-delimiter, so the model echoes the whole
-          # line back as the id; graft matches by exact id, misses every node, and drops good summaries as
-          # "empty-parsed". Normalising at the first pipe recovers them. Reapplied on each switch because mkNpmGlobal
-          # reinstalls @latest. Affects @nanonets/graft 0.19.0 and 0.20.0; drop this once upstream fixes it.
+          # ── graft crux patches ───────────────────────────────────────
+          # Two independent defects in graft's crux pass, both reapplied on each switch because mkNpmGlobal
+          # reinstalls @latest.  Affects @nanonets/graft 0.19.0 and 0.20.0; drop each once upstream fixes it.
+          #   id  - targets render as `- id=<id> | <kind> | ...` with no end-delimiter, so the model echoes the
+          #         whole line back; graft matches by exact id, misses every node, and drops good summaries.
+          #   cap - output is capped at 8192 tokens regardless of model, which cannot hold entries for files of
+          #         ~100+ symbols.  20480 clears them; the SDK rejects >=32768 on a non-streaming call.
           mkGraftCruxPatch = ''
-            # --- graft crux-id patch ---
+            # --- graft crux patches ---
             GRAFT_CRUX="${homeDir}/.local/share/npm-globals/graft/node_modules/@nanonets/graft/dist/ai/crux.js"
             if [ -f "$GRAFT_CRUX" ]; then
-              if ${pkgs.gnugrep}/bin/grep -q 'graft-patch' "$GRAFT_CRUX"; then
+              if ${pkgs.gnugrep}/bin/grep -q 'graft-patch-id' "$GRAFT_CRUX"; then
                 :
               elif ${pkgs.gnugrep}/bin/grep -q '^        id: s.id,$' "$GRAFT_CRUX"; then
-                ${pkgs.gnused}/bin/sed -i 's#^        id: s.id,$#        id: String(s.id).split(" | ")[0].trim(), // graft-patch#' "$GRAFT_CRUX"
-                chown ${primaryUser}:staff "$GRAFT_CRUX"
+                ${pkgs.gnused}/bin/sed -i 's#^        id: s.id,$#        id: String(s.id).split(" | ")[0].trim(), // graft-patch-id#' "$GRAFT_CRUX"
                 echo "Applied graft crux-id patch"
               else
                 echo "  (graft crux-id patch skipped: upstream shape changed -- recheck whether it is still needed)"
               fi
+
+              if ${pkgs.gnugrep}/bin/grep -q 'graft-patch-cap' "$GRAFT_CRUX"; then
+                :
+              elif ${pkgs.gnugrep}/bin/grep -q '^            maxTokens: 8192,$' "$GRAFT_CRUX"; then
+                ${pkgs.gnused}/bin/sed -i 's#^            maxTokens: 8192,$#            maxTokens: 20480, // graft-patch-cap#' "$GRAFT_CRUX"
+                echo "Applied graft crux output-cap patch"
+              else
+                echo "  (graft crux output-cap patch skipped: upstream shape changed -- recheck whether it is still needed)"
+              fi
+
+              chown ${primaryUser}:staff "$GRAFT_CRUX"
             fi
           '';
 
