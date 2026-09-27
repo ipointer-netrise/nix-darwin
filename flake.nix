@@ -689,6 +689,35 @@
             };
           };
 
+          # graft-refresh: keep the --deep meaning layer current across every graft-indexed
+          # repo under ~/Source.  Weekday mornings; everything is content-hash cached so an
+          # unchanged repo is free.  RunAtLoad is off deliberately -- a `darwin-rebuild
+          # switch` should not kick off an hours-long build.  The key is read from ~/.zshenv
+          # by the script, never from here: EnvironmentVariables lands in the world-readable
+          # nix store.
+          launchd.user.agents.graft-refresh = {
+            serviceConfig = {
+              Label = "io.graft.refresh";
+              ProgramArguments = [
+                "/bin/zsh"
+                "${./scripts/graft-refresh.sh}"
+              ];
+              StartCalendarInterval = [
+                { Weekday = 1; Hour = 7; Minute = 0; }
+                { Weekday = 2; Hour = 7; Minute = 0; }
+                { Weekday = 3; Hour = 7; Minute = 0; }
+                { Weekday = 4; Hour = 7; Minute = 0; }
+                { Weekday = 5; Hour = 7; Minute = 0; }
+              ];
+              RunAtLoad = false;
+              EnvironmentVariables = {
+                PATH = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin";
+              };
+              StandardOutPath = "${homeDir}/Library/Logs/graft-refresh.err.log";
+              StandardErrorPath = "${homeDir}/Library/Logs/graft-refresh.err.log";
+            };
+          };
+
           system.activationScripts.extraActivation.text =
             let
               srcZip = ./assets/keyboard-layouts/programmer-dvorak.bundle.zip;

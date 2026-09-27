@@ -1,0 +1,124 @@
+#!/usr/bin/env zsh
+# Refresh graft's --deep meaning layer across every graft-indexed repo under ~/Source.
+#
+# Scheduled by launchd.user.agents.graft-refresh in flake.nix.  Everything is content-hash
+# cached, so a repo that has not changed costs nothing and a repo that has costs only its
+# diff.  A run that hits the budget simply stops; the next one resumes from the cache.
+#
+# Secrets: sources ~/.zshenv for GRAFT_API_KEY rather than carrying the key in the plist,
+# which nix renders into the world-readable store.
+
+emulate -L zsh
+setopt pipefail
+
+SRC="${HOME}/Source"
+LOG="${HOME}/Library/Logs/graft-refresh.log"
+BUDGET="${GRAFT_REFRESH_BUDGET:-5400}"   # seconds of wall clock per run; unfinished work resumes
+GRAFT="/usr/local/bin/graft"
+
+mkdir -p "${LOG:h}"
+exec >>"$LOG" 2>&1
+
+zmodload zsh/datetime
+START=$EPOCHSECONDS
+say() { print -r -- "[$(strftime '%Y-%m-%d %H:%M:%S' $EPOCHSECONDS)] $*" }
+
+# ~/.zshenv is a chezmoi template that resolves ANTHROPIC_API_KEY from 1Password at apply
+# time, so the deployed file holds a literal and no vault unlock is needed here.
+[[ -r "${HOME}/.zshenv" ]] && source "${HOME}/.zshenv"
+
+if [[ -z "${GRAFT_API_KEY:-}" ]]; then
+  say "FATAL: GRAFT_API_KEY unset after sourcing ~/.zshenv; nothing to do"
+  exit 1
+fi
+[[ -x "$GRAFT" ]] || { say "FATAL: $GRAFT missing"; exit 1 }
+
+# The patches graft needs to be worth running at all.  Unpatched, the crux pass discards
+# most of what it pays for, and it does so quietly -- refusing to run beats a silent bill.
+CRUX="${HOME}/.local/share/npm-globals/graft/node_modules/@nanonets/graft/dist/ai/crux.js"
+if [[ $(grep -c 'graft-patch' "$CRUX" 2>/dev/null) -ne 2 ]]; then
+  say "FATAL: graft crux patches missing (expected 2 markers in $CRUX)."
+  say "       run: sudo darwin-rebuild switch --flake /etc/nix-darwin"
+  exit 1
+fi
+
+say "=== graft refresh starting (budget ${BUDGET}s) ==="
+
+# Integration point for a refresh: the default branch, preferring the remote unless the
+# local one leads it (a repo that commits straight to main, e.g. turbine-ui-e2e-tests).
+integration_ref() {
+  local repo=$1 def remote
+  def=$(git -C "$repo" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)
+  def=${def#origin/}
+  [[ -n "$def" ]] || for c in main master trunk; do
+    git -C "$repo" show-ref --verify --quiet "refs/heads/$c" && { def=$c; break }
+  done
+  [[ -n "$def" ]] || return 1
+  remote="origin/$def"
+  git -C "$repo" show-ref --verify --quiet "refs/remotes/$remote" || { print -r -- "$def"; return 0 }
+  # local ahead of remote -> the local branch is the real integration point
+  if [[ $(git -C "$repo" rev-list --count "$remote".."$def" 2>/dev/null || print 0) -gt 0 ]]; then
+    print -r -- "$def"
+  else
+    print -r -- "$remote"
+  fi
+}
+
+refresh_repo() {
+  local repo=$1 name=${1:t} ref wt rc
+  # Linked worktrees share their parent's history; building one separately duplicates work
+  # it would otherwise inherit by seeding.
+  [[ -d "$repo/.git" ]] || { say "skip $name (linked worktree)"; return 0 }
+
+  git -C "$repo" fetch origin --quiet 2>/dev/null
+  ref=$(integration_ref "$repo") || { say "skip $name (no default branch)"; return 0 }
+
+  wt=$(mktemp -d "/tmp/graft-refresh-${name}.XXXXXX") && rmdir "$wt"
+  git -C "$repo" worktree add "$wt" "$ref" --detach --quiet 2>/dev/null \
+    || { say "skip $name (worktree add failed for $ref)"; return 0 }
+  [[ -f "$repo/.graft/config.json" ]] && { mkdir -p "$wt/.graft"; cp "$repo/.graft/config.json" "$wt/.graft/" }
+
+  # Carry both caches in by hand: seeding brings wiring.json and the sidecars but not
+  # summaries.json, and without it passes 1 and 2 are paid again in full.
+  mkdir -p "$wt/graft/.graph" "$wt/graft/.cache"
+  [[ -f "$repo/graft/.graph/wiring.json" ]]   && cp "$repo/graft/.graph/wiring.json"   "$wt/graft/.graph/"
+  [[ -f "$repo/graft/.cache/summaries.json" ]] && cp "$repo/graft/.cache/summaries.json" "$wt/graft/.cache/"
+
+  say "-> $name @ $ref"
+  "$GRAFT" --provider anthropic --model "${GRAFT_MODEL:-claude-haiku-4-5-20251001}" \
+           build --deep -j 4 "$wt" >/dev/null 2>&1
+  rc=$?
+
+  # A non-zero exit still leaves real work on disk -- files that failed stay pending and
+  # retry next run, so the result is always worth transplanting.
+  if [[ -f "$wt/graft/.graph/wiring.json" ]]; then
+    rm -f "$repo"/graft/*.md
+    cp "$wt"/graft/*.md "$repo/graft/" 2>/dev/null
+    cp "$wt/graft/.graph/wiring.json"    "$repo/graft/.graph/wiring.json"
+    cp "$wt/graft/.cache/summaries.json" "$repo/graft/.cache/summaries.json" 2>/dev/null
+    "$GRAFT" build "$repo" >/dev/null 2>&1
+    say "   transplanted $name (graft exit $rc)"
+  else
+    say "   $name produced no graph (graft exit $rc)"
+  fi
+
+  git -C "$repo" worktree remove --force "$wt" 2>/dev/null
+  git -C "$repo" worktree prune 2>/dev/null
+}
+
+typeset -a repos
+repos=(${(f)"$(find "$SRC" -maxdepth 7 -path '*/graft/.graph/wiring.json' \
+  -not -path '*/node_modules/*' -not -path '*/.claude/worktrees/*' 2>/dev/null \
+  | sed 's|/graft/.graph/wiring.json$||' | sort)"})
+
+say "found ${#repos} graft-indexed repo(s)"
+
+for repo in $repos; do
+  if (( EPOCHSECONDS - START >= BUDGET )); then
+    say "budget reached; remaining repos resume next run"
+    break
+  fi
+  refresh_repo "$repo"
+done
+
+say "=== done in $(( EPOCHSECONDS - START ))s ==="
