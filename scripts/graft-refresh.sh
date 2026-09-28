@@ -5,8 +5,8 @@
 # cached, so a repo that has not changed costs nothing and a repo that has costs only its
 # diff.  A run that hits the budget simply stops; the next one resumes from the cache.
 #
-# Secrets: sources ~/.zshenv for GRAFT_API_KEY rather than carrying the key in the plist,
-# which nix renders into the world-readable store.
+# Secrets: sources ~/.zshenv for ANTHROPIC_API_KEY rather than carrying the key in the
+# plist, which nix renders into the world-readable store.
 
 emulate -L zsh
 setopt pipefail
@@ -14,7 +14,12 @@ setopt pipefail
 SRC="${HOME}/Source"
 LOG="${HOME}/Library/Logs/graft-refresh.log"
 BUDGET="${GRAFT_REFRESH_BUDGET:-5400}"   # seconds of wall clock per run; unfinished work resumes
+# Deliberately the raw pinned binary, not the ~/.local/bin/graft wrapper.  The wrapper
+# loads ~/.config/graft/environment, which points interactive graft at OpenRouter and the
+# Jev hook; this is bulk per-file summarization where Haiku is the whole point, so it
+# carries its own provider, model and key instead.
 GRAFT="/usr/local/bin/graft"
+REFRESH_MODEL="${GRAFT_REFRESH_MODEL:-claude-haiku-4-5-20251001}"
 
 mkdir -p "${LOG:h}"
 exec >>"$LOG" 2>&1
@@ -27,17 +32,18 @@ say() { print -r -- "[$(strftime '%Y-%m-%d %H:%M:%S' $EPOCHSECONDS)] $*" }
 # time, so the deployed file holds a literal and no vault unlock is needed here.
 [[ -r "${HOME}/.zshenv" ]] && source "${HOME}/.zshenv"
 
-if [[ -z "${GRAFT_API_KEY:-}" ]]; then
-  say "FATAL: GRAFT_API_KEY unset after sourcing ~/.zshenv; nothing to do"
+if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
+  say "FATAL: ANTHROPIC_API_KEY unset after sourcing ~/.zshenv; nothing to do"
   exit 1
 fi
 [[ -x "$GRAFT" ]] || { say "FATAL: $GRAFT missing"; exit 1 }
 
-# The patches graft needs to be worth running at all.  Unpatched, the crux pass discards
+# The patch graft needs to be worth running at all.  Unpatched, the crux pass discards
 # most of what it pays for, and it does so quietly -- refusing to run beats a silent bill.
+# One marker, not two: the pinned dogfood fork fixes the crux-id defect in its own source.
 CRUX="${HOME}/.local/share/npm-globals/graft/node_modules/@nanonets/graft/dist/ai/crux.js"
-if [[ $(grep -c 'graft-patch' "$CRUX" 2>/dev/null) -ne 2 ]]; then
-  say "FATAL: graft crux patches missing (expected 2 markers in $CRUX)."
+if [[ $(grep -c 'graft-patch' "$CRUX" 2>/dev/null) -ne 1 ]]; then
+  say "FATAL: graft crux patch missing (expected 1 marker in $CRUX)."
   say "       run: sudo darwin-rebuild switch --flake /etc/nix-darwin"
   exit 1
 fi
@@ -85,8 +91,9 @@ refresh_repo() {
   [[ -f "$repo/graft/.cache/summaries.json" ]] && cp "$repo/graft/.cache/summaries.json" "$wt/graft/.cache/"
 
   say "-> $name @ $ref"
-  "$GRAFT" --provider anthropic --model "${GRAFT_MODEL:-claude-haiku-4-5-20251001}" \
-           build --deep -j 4 "$wt" >/dev/null 2>&1
+  GRAFT_API_KEY="$ANTHROPIC_API_KEY" GRAFT_HOOK= \
+    "$GRAFT" --provider anthropic --model "$REFRESH_MODEL" \
+             build --deep -j 4 "$wt" >/dev/null 2>&1
   rc=$?
 
   # A non-zero exit still leaves real work on disk -- files that failed stay pending and

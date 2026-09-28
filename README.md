@@ -79,6 +79,35 @@ Also copy `~/.config/aven/config.yaml` if it exists (it is only created once you
 `~/.local/share/firecrawl/.env` is bootstrapped with placeholders on a fresh machine.
 Re-set `BULL_AUTH_KEY` and `OPENAI_API_KEY` from 1Password.
 
+### Pinned npm tarballs
+
+Two `npmGlobals` entries pin against locally packed tarballs under
+`~/.local/share/npm-packages/` rather than npm's registry, because neither is published:
+the dogfood build of the Graft fork, and the private Jev hook. Those tarballs are build
+artifacts and no repo carries them, so a fresh machine has to rebuild them before the
+first switch will install either package. Activation warns and leaves the entry alone
+when a tarball is missing, so a `darwin-rebuild switch` is safe in the meantime.
+
+```sh
+git clone git@github-personal:ivanpointer/Graft.git ~/Source/Graft
+cd ~/Source/Graft && git checkout dogfood/all-in-flight
+npm ci && npm test && npm run build
+npm pack --pack-destination ~/.local/share/npm-packages
+mv ~/.local/share/npm-packages/nanonets-graft-0.20.0.tgz \
+   ~/.local/share/npm-packages/nanonets-graft-0.20.0-dogfood-c241674.tgz
+
+git clone git@github-personal:ivanpointer/graft-jev.git ~/Source/graft-jev
+cd ~/Source/graft-jev && npm ci && npm run check
+npm pack --pack-destination ~/.local/share/npm-packages
+mv ~/.local/share/npm-packages/ivanpointer-graft-jev-0.1.0.tgz \
+   ~/.local/share/npm-packages/ivanpointer-graft-jev-0.1.0-ed99762.tgz
+```
+
+The commit in each filename is the pin token. Repacking under the same name is a no-op on
+switch, so bump the filename in `flake.nix` whenever the source commit moves. Both clones
+need the `github-personal` SSH alias: plain `github.com` resolves to the work account,
+which cannot see either repo.
+
 ## Applying changes
 
 After editing `flake.nix`:
