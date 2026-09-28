@@ -20,17 +20,34 @@
           primaryUser = "ivanpointer";
           homeDir = "/Users/${primaryUser}";
 
+          # Locally packed tarballs that npmGlobals entries pin against. Not
+          # tracked by any repo -- `npm pack` regenerates them from the source
+          # checkout. A missing tarball warns and leaves the entry alone
+          # rather than silently reinstalling something else.
+          npmPackageDir = "${homeDir}/.local/share/npm-packages";
+
           # ── Declarative global npm CLIs ──────────────────────────────
           # Add { package, bin } entries to npmGlobals. Each entry will
           # be installed/updated to the latest version on every
           # `darwin-rebuild switch`, and its binary symlinked into
           # /usr/local/bin. Versions live in ~/.local/share/npm-globals/.
+          #
+          # `tarball` pins an entry to a local pack instead of @latest. The
+          # pin token is the tarball's filename, so repacking under the same
+          # name is a no-op -- put the source commit in the filename and bump
+          # it whenever the contents change.
+          # `bin = null` installs a library with no executable to link;
+          # such an entry must name its own `dir`.
           mkNpmGlobal =
-            { package, bin }:
+            {
+              package,
+              bin ? null,
+              dir ? bin,
+              tarball ? null,
+            }:
             ''
-              # --- npm global: ${package} (${bin}) ---
-              PREFIX="${homeDir}/.local/share/npm-globals/${bin}"
-              BIN="$PREFIX/node_modules/.bin/${bin}"
+              # --- npm global: ${package} (${dir}) ---
+              PREFIX="${homeDir}/.local/share/npm-globals/${dir}"
 
               mkdir -p "$PREFIX"
               chown -R ${primaryUser}:staff "${homeDir}/.local"
@@ -39,20 +56,48 @@
                 chown -R ${primaryUser}:staff "${homeDir}/.npm"
               fi
 
-              # npm install is idempotent when already at latest; let it
-              # be the source of truth rather than shelling out for a
-              # version check.
-              echo "Ensuring ${package}@latest..."
-              sudo -u ${primaryUser} \
-                HOME="${homeDir}" \
-                PATH="${pkgs.nodejs}/bin:$PATH" \
-                ${pkgs.nodejs}/bin/npm install \
-                  --prefix "$PREFIX" \
-                  --no-audit --no-fund --silent \
-                  "${package}@latest"
+            ''
+            + (
+              if tarball == null then
+                ''
+                  # npm install is idempotent when already at latest; let it
+                  # be the source of truth rather than shelling out for a
+                  # version check.
+                  echo "Ensuring ${package}@latest..."
+                  sudo -u ${primaryUser} \
+                    HOME="${homeDir}" \
+                    PATH="${pkgs.nodejs}/bin:$PATH" \
+                    ${pkgs.nodejs}/bin/npm install \
+                      --prefix "$PREFIX" \
+                      --no-audit --no-fund --silent \
+                      "${package}@latest"
+                ''
+              else
+                ''
+                  PIN_FILE="$PREFIX/.nix-darwin-pin"
+                  PIN_TOKEN="${baseNameOf tarball}"
+                  if [ ! -f "${tarball}" ]; then
+                    echo "  (${package} left as-is: pinned tarball missing at ${tarball})" >&2
+                  elif [ -f "$PIN_FILE" ] && [ "$(cat "$PIN_FILE")" = "$PIN_TOKEN" ]; then
+                    :
+                  else
+                    echo "Installing pinned ${package} from $PIN_TOKEN..."
+                    sudo -u ${primaryUser} \
+                      HOME="${homeDir}" \
+                      PATH="${pkgs.nodejs}/bin:$PATH" \
+                      ${pkgs.nodejs}/bin/npm install \
+                        --prefix "$PREFIX" \
+                        --no-audit --no-fund --silent \
+                        "${tarball}"
+                    printf '%s\n' "$PIN_TOKEN" >"$PIN_FILE"
+                    chown ${primaryUser}:staff "$PIN_FILE"
+                  fi
+                ''
+            )
+            + pkgs.lib.optionalString (bin != null) ''
 
               mkdir -p /usr/local/bin
-              ln -sf "$BIN" /usr/local/bin/${bin}
+              ln -sf "$PREFIX/node_modules/.bin/${bin}" /usr/local/bin/${bin}
             '';
 
           npmGlobals = [
@@ -81,31 +126,41 @@
               # @nanonets scope. The unscoped `graft` on npm is an
               # unrelated, abandoned microservices lib -- don't "fix"
               # this by dropping the scope.
+              #
+              # Pinned to the dogfood build of ivanpointer/Graft
+              # (dogfood/all-in-flight, c241674), which carries the Pi host,
+              # the stable `graft agent-hook` entrypoint, and externally
+              # managed global wiring. Installing from the Git URL instead
+              # does not work: graft's prepare step needs devDependencies,
+              # which a git-dependency install does not reliably provide.
               package = "@nanonets/graft";
               bin = "graft";
+              tarball = "${npmPackageDir}/nanonets-graft-0.20.0-dogfood-c241674.tgz";
+            }
+            {
+              # Jev, the reuse/crux hook graft loads by path through
+              # GRAFT_HOOK (ivanpointer/graft-jev, ed99762). A library with
+              # no executable, so it names its own prefix directory and
+              # links nothing into /usr/local/bin.
+              package = "@ivanpointer/graft-jev";
+              dir = "graft-jev";
+              tarball = "${npmPackageDir}/ivanpointer-graft-jev-0.1.0-ed99762.tgz";
             }
           ];
 
-          # ── graft crux patches ───────────────────────────────────────
-          # Two independent defects in graft's crux pass, both reapplied on each switch because mkNpmGlobal
-          # reinstalls @latest.  Affects @nanonets/graft 0.19.0 and 0.20.0; drop each once upstream fixes it.
-          #   id  - targets render as `- id=<id> | <kind> | ...` with no end-delimiter, so the model echoes the
-          #         whole line back; graft matches by exact id, misses every node, and drops good summaries.
+          # ── graft crux patch ─────────────────────────────────────────
+          # Reapplied on each switch because mkNpmGlobal reinstalls the package whenever its pin moves.
           #   cap - output is capped at 8192 tokens regardless of model, which cannot hold entries for files of
           #         ~100+ symbols.  20480 clears them; the SDK rejects >=32768 on a non-streaming call.
+          #
+          # The companion crux-id patch is gone: the pinned dogfood fork fixes that defect properly in
+          # resolveReturnedId(), so there is no `id: s.id` line left to rewrite.  Dropping the pin back to
+          # published @nanonets/graft 0.19.x/0.20.0 reintroduces the defect and needs the patch restored --
+          # symptom is every crux target missing and good summaries silently discarded.
           mkGraftCruxPatch = ''
-            # --- graft crux patches ---
+            # --- graft crux patch ---
             GRAFT_CRUX="${homeDir}/.local/share/npm-globals/graft/node_modules/@nanonets/graft/dist/ai/crux.js"
             if [ -f "$GRAFT_CRUX" ]; then
-              if ${pkgs.gnugrep}/bin/grep -q 'graft-patch-id' "$GRAFT_CRUX"; then
-                :
-              elif ${pkgs.gnugrep}/bin/grep -q '^        id: s.id,$' "$GRAFT_CRUX"; then
-                ${pkgs.gnused}/bin/sed -i 's#^        id: s.id,$#        id: String(s.id).split(" | ")[0].trim(), // graft-patch-id#' "$GRAFT_CRUX"
-                echo "Applied graft crux-id patch"
-              else
-                echo "  (graft crux-id patch skipped: upstream shape changed -- recheck whether it is still needed)"
-              fi
-
               if ${pkgs.gnugrep}/bin/grep -q 'graft-patch-cap' "$GRAFT_CRUX"; then
                 :
               elif ${pkgs.gnugrep}/bin/grep -q '^            maxTokens: 8192,$' "$GRAFT_CRUX"; then
