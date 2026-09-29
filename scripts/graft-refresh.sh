@@ -104,6 +104,9 @@ refresh_repo() {
     cp "$wt"/graft/*.md "$repo/graft/" 2>/dev/null
     cp "$wt/graft/.graph/wiring.json"    "$repo/graft/.graph/wiring.json"
     cp "$wt/graft/.cache/summaries.json" "$repo/graft/.cache/summaries.json" 2>/dev/null
+    # Without the manifest, checkContext returns `missing` and `graft check` reports
+    # "deep layer: not built" over a layer that is complete.
+    cp "$wt/graft/manifest.json"         "$repo/graft/manifest.json" 2>/dev/null
     "$GRAFT" build "$repo" >/dev/null 2>&1
     say "   transplanted $name (graft exit $rc)"
   else
