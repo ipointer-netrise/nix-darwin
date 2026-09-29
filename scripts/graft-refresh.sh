@@ -101,7 +101,13 @@ refresh_repo() {
   if [[ -z "${GRAFT_HOOK:-}" || ! -r "${GRAFT_HOOK}" ]]; then
     say "   (no Jev hook at '${GRAFT_HOOK:-unset}'; building without reuse routing)"
   fi
-  GRAFT_API_KEY="$ANTHROPIC_API_KEY" \
+  # GRAFT_BASE_URL, GRAFT_PROVIDER and GRAFT_MODEL must be cleared, not just overridden.
+  # ~/.zshenv sourced them for interactive graft (OpenRouter, gpt-6-luna) and --provider
+  # does not displace a base URL, so Anthropic-shaped requests were being posted to
+  # OpenRouter and every deep pass failed at 0% coverage.  Jev's own OpenRouter settings
+  # are separate variables and are deliberately left in place.
+  env -u GRAFT_BASE_URL -u GRAFT_PROVIDER -u GRAFT_MODEL \
+      GRAFT_API_KEY="$ANTHROPIC_API_KEY" \
     "$GRAFT" --provider anthropic --model "$REFRESH_MODEL" \
              build --deep -j 4 "$wt" >/dev/null 2>&1
   rc=$?
