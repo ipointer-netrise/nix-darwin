@@ -92,7 +92,16 @@ refresh_repo() {
   [[ -f "$repo/graft/.cache/summaries.json" ]] && cp "$repo/graft/.cache/summaries.json" "$wt/graft/.cache/"
 
   say "-> $name @ $ref"
-  GRAFT_API_KEY="$ANTHROPIC_API_KEY" GRAFT_HOOK= \
+  # GRAFT_HOOK is deliberately NOT cleared: Jev's crux selector and deep-build router are
+  # the point of running this on a schedule.  It comes from ~/.config/graft/environment via
+  # the ~/.zshenv sourced above, together with JEV_OPENROUTER_API_KEY.  Jev talks to
+  # OpenRouter on its own key; GRAFT_API_KEY below still points graft's prose passes at
+  # Anthropic, so the two providers stay separate.  A hook error falls open to a normal
+  # deep build rather than failing the run.
+  if [[ -z "${GRAFT_HOOK:-}" || ! -r "${GRAFT_HOOK}" ]]; then
+    say "   (no Jev hook at '${GRAFT_HOOK:-unset}'; building without reuse routing)"
+  fi
+  GRAFT_API_KEY="$ANTHROPIC_API_KEY" \
     "$GRAFT" --provider anthropic --model "$REFRESH_MODEL" \
              build --deep -j 4 "$wt" >/dev/null 2>&1
   rc=$?
