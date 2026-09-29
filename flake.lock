@@ -1,5 +1,22 @@
 {
   "nodes": {
+    "graft-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790640926,
+        "narHash": "sha256-DZE8Jpfx6+GVjy9RMyIq6INOKQrdY2rzyxQb3V7Wj8o=",
+        "owner": "ivanpointer",
+        "repo": "Graft",
+        "rev": "0b0f06c891e6264f1de749229f959bf0f1f67d62",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ivanpointer",
+        "repo": "Graft",
+        "rev": "0b0f06c891e6264f1de749229f959bf0f1f67d62",
+        "type": "github"
+      }
+    },
     "nix-darwin": {
       "inputs": {
         "nixpkgs": [
@@ -39,6 +56,7 @@
     },
     "root": {
       "inputs": {
+        "graft-src": "graft-src",
         "nix-darwin": "nix-darwin",
         "nixpkgs": "nixpkgs"
       }

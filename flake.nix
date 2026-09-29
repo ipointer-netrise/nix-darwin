@@ -5,6 +5,13 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     nix-darwin.url = "github:nix-darwin/nix-darwin/master";
     nix-darwin.inputs.nixpkgs.follows = "nixpkgs";
+
+    # Graft's dogfood fork, built from source by the graft package below rather
+    # than installed from npm. Not a flake -- just the source tree.
+    graft-src = {
+      url = "github:ivanpointer/Graft/0b0f06c891e6264f1de749229f959bf0f1f67d62";
+      flake = false;
+    };
   };
 
   outputs =
@@ -12,8 +19,87 @@
       self,
       nix-darwin,
       nixpkgs,
+      graft-src,
     }:
     let
+      # ── graft ────────────────────────────────────────────────────
+      # Built from source rather than installed from npm, because the install has to honour
+      # graft's package-lock.json.  Its tree-sitter-wasm range is "^1.1.6", and 1.1.6 is the
+      # only release in that range carrying the Terraform and HCL grammars -- upstream dropped
+      # them in 1.1.8 and restored them in 2.0.  Resolving the range fresh (which `npm install`
+      # of a packed tarball does, ignoring the lockfile inside it) lands on 1.1.8, and .tf files
+      # are then skipped in silence: requireWasm returns null and the language never warms.
+      #
+      # Crux output is capped at 8192 tokens regardless of model, which cannot hold entries for
+      # files of ~100+ symbols.  20480 clears them; the SDK rejects >=32768 on a non-streaming
+      # call.  Patched in source here rather than sed'd into dist/ after install, which the read
+      # only store forbids -- graft-refresh.sh greps the built output for the marker.
+      #
+      # The companion crux-id patch is gone: this dogfood fork fixes that defect properly in
+      # resolveReturnedId(), so there is no `id: s.id` line left to rewrite.  Moving the pin back
+      # to published @nanonets/graft 0.19.x/0.20.0 reintroduces the defect and needs the patch
+      # restored -- symptom is every crux target missing and good summaries silently discarded.
+      mkGraftPkg = pkgs: pkgs.buildNpmPackage {
+        pname = "nanonets-graft";
+        version = "0.20.0-dogfood-0b0f06c";
+        src = inputs.graft-src;
+        npmDepsHash = "sha256-oynP3gsWXGQmm5qguGdusBXtW9FAeE2voXyNVBpPCs4=";
+
+        # Applies to every npm invocation, `npm rebuild` included, so the native grammars are
+        # compiled explicitly in preBuild.  Unconditional because graft's own `prepare` and
+        # `postinstall`, and tree-sitter-cli's prebuilt-binary downloader, all reach the network.
+        npmFlags = [ "--ignore-scripts" ];
+
+        nativeBuildInputs = [
+          pkgs.python3
+          pkgs.nodejs
+        ];
+
+        postPatch = ''
+          substituteInPlace src/ai/crux.ts \
+            --replace-fail 'maxTokens: 8192,' 'maxTokens: 20480, // graft-patch-cap'
+        '';
+
+        preBuild = ''
+          # Its postinstall fetches a release binary; nothing in graft's runtime needs the CLI.
+          rm -rf node_modules/tree-sitter-cli
+
+          # tree-sitter 0.21.1 pins its binding to C++17, but node 24's bundled V8 headers
+          # (cppgc/macros.h) use concepts and will not compile below C++20.
+          substituteInPlace node_modules/tree-sitter/binding.gyp \
+            --replace-fail '"CLANG_CXX_LANGUAGE_STANDARD": "c++17"' '"CLANG_CXX_LANGUAGE_STANDARD": "c++20"' \
+            --replace-warn '"-std=c++17"' '"-std=c++20"'
+
+          export npm_config_nodedir=${pkgs.nodejs}
+          for gyp in node_modules/*/binding.gyp node_modules/@*/*/binding.gyp; do
+            [ -f "$gyp" ] || continue
+            echo "building native grammar in $(dirname "$gyp")"
+            (cd "$(dirname "$gyp")" && npm exec --offline -- node-gyp rebuild --nodedir=${pkgs.nodejs})
+          done
+        '';
+
+        installPhase = ''
+          runHook preInstall
+
+          npm prune --omit=dev $npmFlags
+
+          MODULE="$out/lib/node_modules/@nanonets/graft"
+          mkdir -p "$MODULE"
+          cp -r dist package.json scripts node_modules "$MODULE/"
+
+          mkdir -p $out/bin
+          makeWrapper ${pkgs.nodejs}/bin/node $out/bin/graft \
+            --add-flags "$MODULE/dist/cli.js"
+
+          runHook postInstall
+        '';
+
+        meta = {
+          description = "Graft repo context graph (ivanpointer dogfood fork, 0b0f06c)";
+          mainProgram = "graft";
+        };
+      };
+
       configuration =
         { pkgs, config, ... }:
         let
@@ -122,22 +208,6 @@
               bin = "codex";
             }
             {
-              # Graft (github.com/trailhq/Graft) ships only under the
-              # @nanonets scope. The unscoped `graft` on npm is an
-              # unrelated, abandoned microservices lib -- don't "fix"
-              # this by dropping the scope.
-              #
-              # Pinned to the dogfood build of ivanpointer/Graft
-              # (dogfood/all-in-flight, c241674), which carries the Pi host,
-              # the stable `graft agent-hook` entrypoint, and externally
-              # managed global wiring. Installing from the Git URL instead
-              # does not work: graft's prepare step needs devDependencies,
-              # which a git-dependency install does not reliably provide.
-              package = "@nanonets/graft";
-              bin = "graft";
-              tarball = "${npmPackageDir}/nanonets-graft-0.20.0-dogfood-c241674.tgz";
-            }
-            {
               # Jev, the reuse/crux hook graft loads by path through
               # GRAFT_HOOK (ivanpointer/graft-jev, ed99762). A library with
               # no executable, so it names its own prefix directory and
@@ -148,30 +218,26 @@
             }
           ];
 
-          # ── graft crux patch ─────────────────────────────────────────
-          # Reapplied on each switch because mkNpmGlobal reinstalls the package whenever its pin moves.
-          #   cap - output is capped at 8192 tokens regardless of model, which cannot hold entries for files of
-          #         ~100+ symbols.  20480 clears them; the SDK rejects >=32768 on a non-streaming call.
-          #
-          # The companion crux-id patch is gone: the pinned dogfood fork fixes that defect properly in
-          # resolveReturnedId(), so there is no `id: s.id` line left to rewrite.  Dropping the pin back to
-          # published @nanonets/graft 0.19.x/0.20.0 reintroduces the defect and needs the patch restored --
-          # symptom is every crux target missing and good summaries silently discarded.
-          mkGraftCruxPatch = ''
-            # --- graft crux patch ---
-            GRAFT_CRUX="${homeDir}/.local/share/npm-globals/graft/node_modules/@nanonets/graft/dist/ai/crux.js"
-            if [ -f "$GRAFT_CRUX" ]; then
-              if ${pkgs.gnugrep}/bin/grep -q 'graft-patch-cap' "$GRAFT_CRUX"; then
-                :
-              elif ${pkgs.gnugrep}/bin/grep -q '^            maxTokens: 8192,$' "$GRAFT_CRUX"; then
-                ${pkgs.gnused}/bin/sed -i 's#^            maxTokens: 8192,$#            maxTokens: 20480, // graft-patch-cap#' "$GRAFT_CRUX"
-                echo "Applied graft crux output-cap patch"
-              else
-                echo "  (graft crux output-cap patch skipped: upstream shape changed -- recheck whether it is still needed)"
-              fi
+          graftPkg = mkGraftPkg pkgs;
 
-              chown ${primaryUser}:staff "$GRAFT_CRUX"
-            fi
+          # Two stable paths into the current generation's graft, re-pointed on every switch.
+          #
+          # /usr/local/bin/graft is the raw binary, by absolute path, for harness MCP configs that
+          # do not inherit a login PATH.  mkNpmGlobal used to create it; graft no longer goes
+          # through npm, so it is maintained here instead.
+          #
+          # /usr/local/share/graft/module is the installed package directory.  Sibling host
+          # adapters -- the Claude statusline shim, graft-usage, chezmoi's skill refresh --
+          # import graft's compiled dist/claude modules directly rather than shelling out to the
+          # CLI, and graft-refresh.sh greps dist/ai/crux.js for the patch marker.  It is not
+          # reachable through the system profile: environment.pathsToLink covers /bin and a few
+          # /share subtrees, not /lib, and widening that to link every package's lib is not worth
+          # one consumer.
+          mkGraftSymlinks = ''
+            # --- graft: stable paths into the current generation ---
+            mkdir -p /usr/local/bin /usr/local/share/graft
+            ln -sf "${graftPkg}/bin/graft" /usr/local/bin/graft
+            ln -sfn "${graftPkg}/lib/node_modules/@nanonets/graft" /usr/local/share/graft/module
           '';
 
           # ── Declarative pi-coding-agent packages ─────────────────────
@@ -381,6 +447,8 @@
           # List packages installed in system profile. To search by name, run:
           # $ nix-env -qaP | grep wget
           environment.systemPackages = [
+            graftPkg
+
             # tmux
             pkgs.tmux
             pkgs.tmuxPlugins.catppuccin
@@ -653,7 +721,7 @@
                     # --- Global npm CLIs (declared in npmGlobals above) ---
                     ${pkgs.lib.concatMapStrings mkNpmGlobal npmGlobals}
 
-                    ${mkGraftCruxPatch}
+                    ${mkGraftSymlinks}
 
                     # --- Pi packages (declared in piPackages above) ---
                     ${pkgs.lib.concatMapStrings mkPiPackage piPackages}
@@ -932,5 +1000,21 @@
       darwinConfigurations.default = nix-darwin.lib.darwinSystem {
         modules = [ configuration ];
       };
+
+      # `nix build .#graft` builds the same derivation the system installs, without a
+      # rebuild of everything else.  graft-claude-dir is the compiled dist/claude tree,
+      # which sibling host adapters import directly rather than through the CLI.
+      packages.aarch64-darwin =
+        let
+          pkgs = nixpkgs.legacyPackages.aarch64-darwin;
+          graft = mkGraftPkg pkgs;
+        in
+        {
+          inherit graft;
+          default = graft;
+          graft-claude-dir = pkgs.runCommand "graft-claude-dir" { } ''
+            ln -s ${graft}/lib/node_modules/@nanonets/graft/dist/claude $out
+          '';
+        };
     };
 }

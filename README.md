@@ -81,21 +81,14 @@ Re-set `BULL_AUTH_KEY` and `OPENAI_API_KEY` from 1Password.
 
 ### Pinned npm tarballs
 
-Two `npmGlobals` entries pin against locally packed tarballs under
-`~/.local/share/npm-packages/` rather than npm's registry, because neither is published:
-the dogfood build of the Graft fork, and the private Jev hook. Those tarballs are build
-artifacts and no repo carries them, so a fresh machine has to rebuild them before the
-first switch will install either package. Activation warns and leaves the entry alone
-when a tarball is missing, so a `darwin-rebuild switch` is safe in the meantime.
+One `npmGlobals` entry pins against a locally packed tarball under
+`~/.local/share/npm-packages/` rather than npm's registry, because it is not published:
+the private Jev hook. That tarball is a build artifact and no repo carries it, so a fresh
+machine has to rebuild it before the first switch will install the package. Activation
+warns and leaves the entry alone when the tarball is missing, so a `darwin-rebuild switch`
+is safe in the meantime.
 
 ```sh
-git clone git@github-personal:ivanpointer/Graft.git ~/Source/Graft
-cd ~/Source/Graft && git checkout dogfood/all-in-flight
-npm ci && npm test && npm run build
-npm pack --pack-destination ~/.local/share/npm-packages
-mv ~/.local/share/npm-packages/nanonets-graft-0.20.0.tgz \
-   ~/.local/share/npm-packages/nanonets-graft-0.20.0-dogfood-c241674.tgz
-
 git clone git@github-personal:ivanpointer/graft-jev.git ~/Source/graft-jev
 cd ~/Source/graft-jev && npm ci && npm run check
 npm pack --pack-destination ~/.local/share/npm-packages
@@ -103,10 +96,41 @@ mv ~/.local/share/npm-packages/ivanpointer-graft-jev-0.1.0.tgz \
    ~/.local/share/npm-packages/ivanpointer-graft-jev-0.1.0-ed99762.tgz
 ```
 
-The commit in each filename is the pin token. Repacking under the same name is a no-op on
-switch, so bump the filename in `flake.nix` whenever the source commit moves. Both clones
-need the `github-personal` SSH alias: plain `github.com` resolves to the work account,
-which cannot see either repo.
+The commit in the filename is the pin token. Repacking under the same name is a no-op on
+switch, so bump the filename in `flake.nix` whenever the source commit moves. The clone
+needs the `github-personal` SSH alias: plain `github.com` resolves to the work account,
+which cannot see the repo.
+
+### Graft
+
+Graft is **not** an npm global. It is built from source by the `graft` package in
+`flake.nix`, pinned by the `graft-src` flake input to a commit of the `ivanpointer/Graft`
+dogfood fork, and installed into `environment.systemPackages`. Nothing has to be packed by
+hand, and a fresh machine gets it from the first switch.
+
+```sh
+nix build /etc/nix-darwin#graft     # just the package, no system rebuild
+nix flake lock --update-input graft-src   # after moving the pin in flake.nix
+```
+
+Building from source rather than packing a tarball is load-bearing, not a preference.
+`buildNpmPackage` installs from graft's committed `package-lock.json`; `npm install` of a
+packed tarball ignores the lockfile inside it and re-resolves every semver range. Graft
+depends on `tree-sitter-wasm@^1.1.6`, and 1.1.6 is the only release in that range that
+carries the Terraform and HCL grammars -- upstream dropped them in 1.1.8 and restored them
+in 2.0. Re-resolved, the range lands on 1.1.8 and every `.tf` file is skipped in silence.
+
+Three paths depend on where the package lands, and all three move together when the pin
+moves, because the store path changes:
+
+| Path | Who uses it |
+| --- | --- |
+| `/run/current-system/sw/bin/graft` | `scripts/graft-refresh.sh`, the raw binary |
+| `/usr/local/bin/graft` | harness MCP configs; a symlink activation maintains |
+| `/usr/local/share/graft/module` | `graft-refresh.sh`'s crux-patch check; `dist/claude` under it is what the Claude statusline shim, `graft-usage` and chezmoi's skill refresh import |
+
+`~/.local/bin/graft` (chezmoi) stays the entrypoint for interactive shells and agent
+harnesses -- it loads `~/.config/graft/environment` first, which the raw binary does not.
 
 ## Applying changes
 

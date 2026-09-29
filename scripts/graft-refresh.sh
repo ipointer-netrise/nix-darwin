@@ -18,7 +18,8 @@ BUDGET="${GRAFT_REFRESH_BUDGET:-5400}"   # seconds of wall clock per run; unfini
 # loads ~/.config/graft/environment, which points interactive graft at OpenRouter and the
 # Jev hook; this is bulk per-file summarization where Haiku is the whole point, so it
 # carries its own provider, model and key instead.
-GRAFT="/usr/local/bin/graft"
+GRAFT="/run/current-system/sw/bin/graft"
+GRAFT_MODULE="/usr/local/share/graft/module"
 REFRESH_MODEL="${GRAFT_REFRESH_MODEL:-claude-haiku-4-5-20251001}"
 
 mkdir -p "${LOG:h}"
@@ -41,7 +42,7 @@ fi
 # The patch graft needs to be worth running at all.  Unpatched, the crux pass discards
 # most of what it pays for, and it does so quietly -- refusing to run beats a silent bill.
 # One marker, not two: the pinned dogfood fork fixes the crux-id defect in its own source.
-CRUX="${HOME}/.local/share/npm-globals/graft/node_modules/@nanonets/graft/dist/ai/crux.js"
+CRUX="${GRAFT_MODULE}/dist/ai/crux.js"
 if [[ $(grep -c 'graft-patch' "$CRUX" 2>/dev/null) -ne 1 ]]; then
   say "FATAL: graft crux patch missing (expected 1 marker in $CRUX)."
   say "       run: sudo darwin-rebuild switch --flake /etc/nix-darwin"
