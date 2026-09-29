@@ -9,7 +9,7 @@
     # Graft's dogfood fork, built from source by the graft package below rather
     # than installed from npm. Not a flake -- just the source tree.
     graft-src = {
-      url = "github:ivanpointer/Graft/3f0dc8283fe7b6a427d409b862d496117ce26fd1";
+      url = "github:ivanpointer/Graft/085801a85bd49a943e751bc3412dab71e9614d7f";
       flake = false;
     };
   };
@@ -41,7 +41,7 @@
       # restored -- symptom is every crux target missing and good summaries silently discarded.
       mkGraftPkg = pkgs: pkgs.buildNpmPackage {
         pname = "nanonets-graft";
-        version = "0.20.0-dogfood-3f0dc82";
+        version = "0.20.0-dogfood-085801a";
         src = inputs.graft-src;
         npmDepsHash = "sha256-oynP3gsWXGQmm5qguGdusBXtW9FAeE2voXyNVBpPCs4=";
 
@@ -95,7 +95,7 @@
         '';
 
         meta = {
-          description = "Graft repo context graph (ivanpointer dogfood fork, 3f0dc82)";
+          description = "Graft repo context graph (ivanpointer dogfood fork, 085801a)";
           mainProgram = "graft";
         };
       };

@@ -77,19 +77,6 @@ refresh_repo() {
   # it would otherwise inherit by seeding.
   [[ -d "$repo/.git" ]] || { say "skip $name (linked worktree)"; return 0 }
 
-  # A tracked .tfvars holds environment values -- ids, account numbers, sometimes
-  # credentials -- and --deep ships file and symbol bodies to the provider.  No flag
-  # prevents it: -e narrows CODE_EXTENSIONS, which governs the per-file pass, but the
-  # crux pass walks the wiring graph and buildGraph takes no extension option at all.
-  # So the repo is skipped whole rather than half-protected.  Untrack the file, or drop
-  # this guard deliberately, to let the repo back in.
-  local tfvars
-  tfvars=$(git -C "$repo" ls-files '*.tfvars' 2>/dev/null | head -5)
-  if [[ -n "$tfvars" ]]; then
-    say "skip $name (tracked .tfvars would be sent to the provider: ${(j:, :)${(f)tfvars}})"
-    return 0
-  fi
-
   git -C "$repo" fetch origin --quiet 2>/dev/null
   ref=$(integration_ref "$repo") || { say "skip $name (no default branch)"; return 0 }
 
