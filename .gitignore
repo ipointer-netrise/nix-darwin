@@ -2,3 +2,6 @@
 result
 flake.nix.bak.*
 graft/
+# agent-policy state begin
+/.agent-state/
+# agent-policy state end

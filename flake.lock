@@ -85,6 +85,23 @@
         "type": "github"
       }
     },
+    "mac-xeneon-edge-touch-driver": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1777880997,
+        "narHash": "sha256-WnjVsqpaNecLssJESvurqGANHVmUASMt2tdhMvSPIvY=",
+        "owner": "ajvwhite",
+        "repo": "MacXeneonEdgeTouchDriver",
+        "rev": "13c0f34e982d9372f0aa7e3180e903b289324f7d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ajvwhite",
+        "ref": "main",
+        "repo": "MacXeneonEdgeTouchDriver",
+        "type": "github"
+      }
+    },
     "nix-darwin": {
       "inputs": {
         "nixpkgs": [
@@ -197,6 +214,7 @@
       "inputs": {
         "graft-src": "graft-src",
         "hermes-agent": "hermes-agent",
+        "mac-xeneon-edge-touch-driver": "mac-xeneon-edge-touch-driver",
         "nix-darwin": "nix-darwin",
         "nixpkgs": "nixpkgs"
       }
