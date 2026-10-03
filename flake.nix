@@ -406,32 +406,6 @@
               || echo "  (aven daemon install failed; run manually)"
           '';
 
-          # ── Figma Dev Mode MCP server ────────────────────────────────
-          # Declared here rather than in chezmoi's modify_dot_claude.json.tmpl
-          # because it's paired with the figma cask above: Figma's own Dev
-          # Mode MCP server (Preferences → Enable local MCP Server) is what
-          # answers on 127.0.0.1:3845, so the entry belongs next to the thing
-          # that provides it. Same idempotent-merge shape as chezmoi's
-          # goland entry: skip if already present, no trailing newline (see
-          # modify_dot_claude.json.tmpl for why).
-          mkFigmaMcp = ''
-            # --- Figma Dev Mode MCP server ---
-            echo "Ensuring Figma Dev Mode MCP server in ~/.claude.json..."
-            CLAUDE_JSON="${homeDir}/.claude.json"
-            EXISTING=$(sudo -u ${primaryUser} cat "$CLAUDE_JSON" 2>/dev/null || true)
-            [ -n "$EXISTING" ] || EXISTING='{}'
-            UPDATED=$(printf '%s' "$EXISTING" | ${pkgs.jq}/bin/jq '
-              .mcpServers = (.mcpServers // {}) |
-              if .mcpServers["figma-dev-mode-mcp-server"] then . else
-                .mcpServers["figma-dev-mode-mcp-server"] = {
-                  type: "http",
-                  url: "http://127.0.0.1:3845/mcp"
-                }
-              end
-            ')
-            sudo -u ${primaryUser} sh -c 'printf "%s" "$1" > "$2"' -- "$UPDATED" "$CLAUDE_JSON"
-          '';
-
           # ── Synergy 3 ────────────────────────────────────────────────
           # Closed-source, so there is no cask or nixpkgs package. Pinned by version and
           # sha256; bump all three together. The token is Symless's public guest token.
@@ -783,8 +757,6 @@
                     ${mkAvenSkill}
 
                     ${mkAvenDaemon}
-
-                    ${mkFigmaMcp}
 
                     ${mkSynergy}
 
