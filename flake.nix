@@ -408,6 +408,31 @@
             }
           ];
 
+          # ── Synergy 3 ────────────────────────────────────────────────
+          # Closed-source, so there is no cask or nixpkgs package. Pinned by version and
+          # sha256; bump all three together. The token is Symless's public guest token.
+          synergyVersion = "3.7.2";
+          synergySha256 = "3bc0fbcc1ed8b646c830ab4b02ad0c66b36447d3488312a42243bb1e7a822a9f";
+          synergyUrl = "https://symless.com/synergy/api/download/synergy-${synergyVersion}-macos-arm64.dmg?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJwcm9kdWN0UGFja2FnZUlkIjoxMjU2LCJ1c2VySWQiOm51bGwsImlhdCI6MTc5MTA0NzM2Mn0.13OUtDT-V13Y-F8AxQADnossgTMVPu9NQecFWzWdlIc";
+          mkSynergy = ''
+            # --- Synergy 3 (pinned DMG install) ---
+            SYNERGY_APP="/Applications/Synergy.app"
+            SYNERGY_HAVE=$(/usr/bin/defaults read "$SYNERGY_APP/Contents/Info" CFBundleShortVersionString 2>/dev/null || true)
+            if [ "$SYNERGY_HAVE" != "${synergyVersion}" ]; then
+              echo "Installing Synergy ${synergyVersion} (have: ''${SYNERGY_HAVE:-none})..."
+              (
+                set -e
+                SYNERGY_TMP=$(/usr/bin/mktemp -d)
+                trap '/usr/bin/hdiutil detach "$SYNERGY_TMP/mnt" -quiet 2>/dev/null || true; rm -rf "$SYNERGY_TMP"' EXIT
+                /usr/bin/curl -fsSL -o "$SYNERGY_TMP/synergy.dmg" "${synergyUrl}"
+                echo "${synergySha256}  $SYNERGY_TMP/synergy.dmg" | /usr/bin/shasum -a 256 -c -
+                /usr/bin/hdiutil attach -nobrowse -readonly -mountpoint "$SYNERGY_TMP/mnt" "$SYNERGY_TMP/synergy.dmg" -quiet
+                rm -rf "$SYNERGY_APP"
+                /usr/bin/ditto "$SYNERGY_TMP/mnt/Synergy.app" "$SYNERGY_APP"
+              ) || echo "  (Synergy install failed; run activation again or install manually)"
+            fi
+          '';
+
           # ── Firecrawl (self-hosted, docker compose) ──────────────────
           # Cloned to ${firecrawlDir}, run as a launchd user agent so it
           # starts on login (Docker Desktop is per-user, so a system
@@ -732,6 +757,8 @@
 
                     ${mkFigmaMcp}
 
+                    ${mkSynergy}
+
                     # --- uv-tool CLIs (declared in uvTools above) ---
                     ${pkgs.lib.concatMapStrings mkUvTool uvTools}
 
@@ -890,22 +917,15 @@
             hitoolbox.AppleFnUsageType = "Change Input Source";
             CustomUserPreferences = {
 
-              # Universal Control: Apple's built-in keyboard/mouse sharing
-              # between nearby Macs/iPads signed into the same Apple ID.
-              # Requires Handoff (below), Bluetooth+Wi-Fi, and 2FA on the
-              # Apple ID. The three keys mirror the Displays → Advanced UI:
-              #   Disable=0             → feature on
-              #   DisableMagicEdges=0   → cursor crosses display edges
-              #   DisableAutoDiscovery=0 → auto-link nearby devices
+              # Universal Control is off so it doesn't fight Synergy for the pointer.
+              # The keys mirror Displays → Advanced; all three are 1 (disabled).
               "com.apple.universalcontrol" = {
-                Disable = 0;
-                DisableMagicEdges = 0;
-                DisableAutoDiscovery = 0;
+                Disable = 1;
+                DisableMagicEdges = 1;
+                DisableAutoDiscovery = 1;
               };
 
-              # Handoff — Universal Control refuses to link without it.
-              # Both advertising (this Mac visible to peers) and receiving
-              # (accept sessions from peers) must be on.
+              # Handoff stays on; it is independent of Universal Control.
               "com.apple.coreservices.useractivityd" = {
                 ActivityAdvertisingAllowed = true;
                 ActivityReceivingAllowed = true;
