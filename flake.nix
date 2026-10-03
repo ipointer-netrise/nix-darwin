@@ -457,37 +457,6 @@
             fi
           '';
 
-          # ── Xeneon Touch ─────────────────────────────────────────────
-          # Built from source with the Xcode CLT (swiftc, make) rather than the nix sandbox. The result is
-          # ad-hoc signed, so its TCC grants (Input Monitoring, Accessibility) are tied to the binary hash:
-          # every rebuild needs re-approving, so it only rebuilds when this pin changes.
-          xeneonTouchRev = "526a6055c119ae2e0b9ba884e3ebc81368549350";
-          mkXeneonTouch = ''
-            # --- Xeneon Touch (pinned source build) ---
-            XENEON_APP="/Applications/Xeneon Touch.app"
-            XENEON_STATE="${homeDir}/.local/share/xeneon-touch"
-            if [ ! -d "$XENEON_APP" ] || [ "$(cat "$XENEON_STATE/rev" 2>/dev/null)" != "${xeneonTouchRev}" ]; then
-              echo "Building Xeneon Touch ${xeneonTouchRev}..."
-              (
-                set -e
-                XENEON_TMP=$(sudo -u ${primaryUser} /usr/bin/mktemp -d)
-                trap 'rm -rf "$XENEON_TMP"' EXIT
-                sudo -u ${primaryUser} HOME="${homeDir}" PATH="${pkgs.git}/bin:/usr/bin:/bin:/usr/sbin:/sbin" sh -c '
-                  cd "$1"
-                  git init -q src && cd src
-                  git fetch -q --depth 1 https://github.com/MorganZ/xeneon-edge-touch-macos.git "$2"
-                  git checkout -q FETCH_HEAD
-                  make app
-                ' -- "$XENEON_TMP" "${xeneonTouchRev}"
-                /usr/bin/pkill -x "Xeneon Touch" || true
-                rm -rf "$XENEON_APP"
-                /usr/bin/ditto "$XENEON_TMP/src/dist/Xeneon Touch.app" "$XENEON_APP"
-                sudo -u ${primaryUser} mkdir -p "$XENEON_STATE"
-                printf '%s\n' "${xeneonTouchRev}" | sudo -u ${primaryUser} tee "$XENEON_STATE/rev" >/dev/null
-              ) || echo "  (Xeneon Touch build failed; needs the Xcode Command Line Tools and network)"
-            fi
-          '';
-
           # ── Firecrawl (self-hosted, docker compose) ──────────────────
           # Cloned to ${firecrawlDir}, run as a launchd user agent so it
           # starts on login (Docker Desktop is per-user, so a system
@@ -597,7 +566,6 @@
             pkgs.gum
 
             # AI
-            pkgs.aichat
             # opencode is installed via npm in the postActivation script
             # below (see npmGlobals / system.activationScripts.postActivation).
             # pi-coding-agent is installed via npm in the postActivation
@@ -819,8 +787,6 @@
                     ${mkFigmaMcp}
 
                     ${mkSynergy}
-
-                    ${mkXeneonTouch}
 
                     # --- Firecrawl repo + .env bootstrap ---
                     FIRECRAWL_DIR="${firecrawlDir}"
