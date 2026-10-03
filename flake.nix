@@ -6,6 +6,13 @@
     nix-darwin.url = "github:nix-darwin/nix-darwin/master";
     nix-darwin.inputs.nixpkgs.follows = "nixpkgs";
 
+    # Hermes Agent ships its own Nix package. Keep it as a flake input because
+    # this nixpkgs revision does not package it.
+    hermes-agent = {
+      url = "github:NousResearch/hermes-agent";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Graft's dogfood fork, built from source by the graft package below rather
     # than installed from npm. Not a flake -- just the source tree.
     graft-src = {
@@ -20,6 +27,7 @@
       nix-darwin,
       nixpkgs,
       graft-src,
+      hermes-agent,
     }:
     let
       # ── graft ────────────────────────────────────────────────────
@@ -100,23 +108,51 @@
         };
       };
 
+      mkToastMonitorPkg = pkgs:
+        pkgs.stdenvNoCC.mkDerivation {
+          pname = "ToastMonitor";
+          version = "1.16.3";
+          src = pkgs.fetchurl {
+            url = "https://github.com/Toast1zz/ToastMonitor/releases/download/v1.16.3/ToastMonitor-1.16.3-arm64.zip";
+            hash = "sha256-RYj6y55VU4HAmam4/JtoGloUeLVBQB2fKm0zQDp5wgk=";
+          };
+
+          nativeBuildInputs = [ pkgs.unzip ];
+          unpackPhase = "unzip -qq $src";
+          installPhase = ''
+            mkdir -p "$out/Applications"
+            cp -R ToastMonitor.app "$out/Applications/"
+          '';
+
+          # Its signed bundle must not be altered; upgrades are managed by this flake.
+          dontFixup = true;
+
+          meta = {
+            description = "Native macOS menu-bar AI usage monitor";
+            platforms = [ "aarch64-darwin" ];
+          };
+        };
+
       configuration =
         { pkgs, config, ... }:
         let
           primaryUser = "ivanpointer";
           homeDir = "/Users/${primaryUser}";
+          toastMonitorPkg = mkToastMonitorPkg pkgs;
 
           # Locally packed tarballs that npmGlobals entries pin against. Not
           # tracked by any repo -- `npm pack` regenerates them from the source
           # checkout. A missing tarball warns and leaves the entry alone
           # rather than silently reinstalling something else.
           npmPackageDir = "${homeDir}/.local/share/npm-packages";
+          npmGlobalPrefix = "${homeDir}/.local/share/npm-global";
 
           # ── Declarative global npm CLIs ──────────────────────────────
           # Add { package, bin } entries to npmGlobals. Each entry will
           # be installed/updated to the latest version on every
           # `darwin-rebuild switch`, and its binary symlinked into
-          # /usr/local/bin. Versions live in ~/.local/share/npm-globals/.
+          # /usr/local/bin. Harnesses share a writable npm global prefix so
+          # their native `npm install -g` updaters reach the launched binary.
           #
           # `tarball` pins an entry to a local pack instead of @latest. The
           # pin token is the tarball's filename, so repacking under the same
@@ -130,10 +166,14 @@
               bin ? null,
               dir ? bin,
               tarball ? null,
+              global ? true,
             }:
+            let
+              prefix = if global then npmGlobalPrefix else "${homeDir}/.local/share/npm-globals/${dir}";
+            in
             ''
               # --- npm global: ${package} (${dir}) ---
-              PREFIX="${homeDir}/.local/share/npm-globals/${dir}"
+              PREFIX="${prefix}"
 
               mkdir -p "$PREFIX"
               chown -R ${primaryUser}:staff "${homeDir}/.local"
@@ -154,6 +194,7 @@
                     HOME="${homeDir}" \
                     PATH="${pkgs.nodejs}/bin:$PATH" \
                     ${pkgs.nodejs}/bin/npm install \
+                      ${pkgs.lib.optionalString global "--global"} \
                       --prefix "$PREFIX" \
                       --no-audit --no-fund --silent \
                       "${package}@latest"
@@ -183,7 +224,7 @@
             + pkgs.lib.optionalString (bin != null) ''
 
               mkdir -p /usr/local/bin
-              ln -sf "$PREFIX/node_modules/.bin/${bin}" /usr/local/bin/${bin}
+              ln -sf "${if global then "$PREFIX/bin/${bin}" else "$PREFIX/node_modules/.bin/${bin}"}" /usr/local/bin/${bin}
             '';
 
           npmGlobals = [
@@ -192,7 +233,7 @@
               bin = "pi";
             }
             {
-              package = "opencode-ai";
+              package = "@opencode/cli";
               bin = "opencode";
             }
             {
@@ -200,12 +241,12 @@
               bin = "babysitter-opencode";
             }
             {
-              # Not pkgs.codex: nixpkgs typically trails codex releases by
-              # a week or more (0.147 vs 0.149 upstream at time of writing).
-              # npm tracks upstream same-day, at the cost of the version no
-              # longer being pinned by flake.lock.
               package = "@openai/codex";
               bin = "codex";
+            }
+            {
+              package = "@anthropic-ai/claude-code";
+              bin = "claude";
             }
             {
               # Jev, the reuse/crux hook graft loads by path through
@@ -215,6 +256,7 @@
               package = "@ivanpointer/graft-jev";
               dir = "graft-jev";
               tarball = "${npmPackageDir}/ivanpointer-graft-jev-0.1.0-ed99762.tgz";
+              global = false;
             }
           ];
 
@@ -240,22 +282,64 @@
             ln -sfn "${graftPkg}/lib/node_modules/@nanonets/graft" /usr/local/share/graft/module
           '';
 
+          mkSelfUpdatingHarness =
+            {
+              name,
+              bin,
+              marker,
+              installerUrl,
+              installerArgs ? "",
+            }:
+            let
+              argsSuffix = pkgs.lib.optionalString (installerArgs != "") " -s -- ${installerArgs}";
+            in
+            ''
+              # --- self-updating harness: ${name} ---
+              if [ ! -e "${marker}" ]; then
+                echo "Installing ${name}..."
+                sudo -u ${primaryUser} \
+                  HOME="${homeDir}" \
+                  PATH="${pkgs.curl}/bin:${pkgs.bash}/bin:/usr/local/bin:$PATH" \
+                  ${pkgs.bash}/bin/bash -c '${pkgs.curl}/bin/curl -fsSL ${installerUrl} | ${pkgs.bash}/bin/bash${argsSuffix}'
+              fi
+
+              mkdir -p /usr/local/bin
+              ln -sf "${homeDir}/.local/bin/${bin}" /usr/local/bin/${bin}
+            '';
+
+          selfUpdatingHarnesses = [
+            {
+              name = "Antigravity CLI";
+              bin = "agy";
+              marker = "${homeDir}/.local/bin/agy";
+              installerUrl = "https://antigravity.google/cli/install.sh";
+              installerArgs = "--dir ${homeDir}/.local/bin";
+            }
+          ];
+
           # ── Declarative pi-coding-agent packages ─────────────────────
           # Pi packages (extensions/skills/themes) are managed via
           # `pi install npm:<name>`, which records them in
           # ~/.pi/agent/settings.json under `packages`. We make this
           # declarative here so a fresh machine gets the same set.
+          # Unpinned: every activation updates to latest, and a failure never blocks the switch.
           mkPiPackage = pkg: ''
             # --- pi package: ${pkg} ---
             PI_SETTINGS="${homeDir}/.pi/agent/settings.json"
             if [ ! -f "$PI_SETTINGS" ] || ! ${pkgs.jq}/bin/jq -e \
                 --arg p "npm:${pkg}" \
                 '(.packages // []) | index($p)' "$PI_SETTINGS" >/dev/null 2>&1; then
-              echo "Ensuring pi package ${pkg}..."
+              echo "Installing pi package ${pkg}..."
               sudo -u ${primaryUser} \
                 HOME="${homeDir}" \
                 PATH="${pkgs.nodejs}/bin:/usr/local/bin:$PATH" \
                 /usr/local/bin/pi install "npm:${pkg}" || true
+            else
+              echo "Updating pi package ${pkg}..."
+              sudo -u ${primaryUser} \
+                HOME="${homeDir}" \
+                PATH="${pkgs.nodejs}/bin:/usr/local/bin:$PATH" \
+                /usr/local/bin/pi update "npm:${pkg}" || true
             fi
           '';
 
@@ -348,66 +432,6 @@
             sudo -u ${primaryUser} sh -c 'printf "%s" "$1" > "$2"' -- "$UPDATED" "$CLAUDE_JSON"
           '';
 
-          # ── Declarative uv-tool CLIs ─────────────────────────────────
-          # Python CLIs distributed on PyPI, installed via `uv tool
-          # install --upgrade`. uv manages an isolated venv per tool and
-          # auto-fetches a compatible managed CPython, so no system
-          # Python is required. The tool's bin lands in ~/.local/bin and
-          # is symlinked into /usr/local/bin (mirrors mkNpmGlobal).
-          mkUvTool =
-            { package, bin, withPackages ? [ ] }:
-            let
-              withFlags = pkgs.lib.concatMapStringsSep " " (p: "--with ${pkgs.lib.escapeShellArg p}") withPackages;
-            in
-            ''
-              # --- uv tool: ${package} (${bin}) ---
-              chown -R ${primaryUser}:staff "${homeDir}/.local" || true
-
-              echo "Ensuring ${package}@latest via uv tool..."
-              sudo -u ${primaryUser} \
-                HOME="${homeDir}" \
-                PATH="${pkgs.uv}/bin:$PATH" \
-                ${pkgs.uv}/bin/uv tool install --upgrade ${withFlags} "${package}"
-
-              mkdir -p /usr/local/bin
-              ln -sf "${homeDir}/.local/bin/${bin}" /usr/local/bin/${bin}
-            '';
-
-          uvTools = [
-            {
-              # [all] pulls in every optional extra (mcp, messaging,
-              # voice, vision, etc.). [mcp] alone would suffice for the
-              # Open Brain integration but [all] matches what `hermes
-              # doctor` recommends and keeps connectors available.
-              package = "hermes-agent[all]";
-              bin = "hermes";
-              # The following Python deps are NOT pulled by
-              # hermes-agent[all] — they're in Hermes' lazy-install
-              # allowlist (see tools/lazy_deps.py) and only get installed
-              # when the feature is first used. We inject them here so:
-              #   * sounddevice — needs system PortAudio (pkgs.portaudio
-              #     above); declarative install matches the system lib.
-              #   * numpy — sounddevice runtime dep.
-              #   * faster-whisper — `/voice on` STT backend. Its lazy
-              #     prompt gets swallowed by the CLI's rendering layer
-              #     and hangs the session, so we pre-install.
-              #   * anthropic — native Anthropic SDK (provider=anthropic
-              #     paths). Used by the agent default model.
-              #   * edge-tts — default TTS backend for `/voice tts`.
-              # `uv tool install --upgrade --with X` does a clean
-              # re-resolve, so any lazy-installed dep not listed here
-              # gets pruned on every `make apply`. Add to this list any
-              # Hermes feature you want sticky across rebuilds.
-              withPackages = [
-                "sounddevice"
-                "numpy"
-                "faster-whisper"
-                "anthropic"
-                "edge-tts"
-              ];
-            }
-          ];
-
           # ── Synergy 3 ────────────────────────────────────────────────
           # Closed-source, so there is no cask or nixpkgs package. Pinned by version and
           # sha256; bump all three together. The token is Symless's public guest token.
@@ -472,7 +496,9 @@
           # List packages installed in system profile. To search by name, run:
           # $ nix-env -qaP | grep wget
           environment.systemPackages = [
+            pkgs.python3
             graftPkg
+            toastMonitorPkg
 
             # tmux
             pkgs.tmux
@@ -488,10 +514,11 @@
             pkgs.nodejs
             pkgs.cargo
 
-            # uv: Python tooling (used by uvTools, e.g. hermes-agent)
+            # uv: Python tooling
             pkgs.uv
-            pkgs.ffmpeg # optional hermes TTS dependency
-            pkgs.portaudio # hermes voice mode: PortAudio C library for sounddevice Python bindings
+            # Required by the MOSS-TTS installer for voice-reference cropping.
+            pkgs.ffmpeg
+            inputs.hermes-agent.packages.${pkgs.stdenv.hostPlatform.system}.default
 
             pkgs.go
             # Keeps linting reproducible across rebuilds; a `go install`ed
@@ -524,12 +551,6 @@
             pkgs.starship
             pkgs.carapace
             pkgs.sesh
-            pkgs.claude-code
-            # Replaces pkgs.gemini-cli: Google cut Gemini CLI off for the
-            # free/Pro/Ultra tiers on 2026-06-18, and nixpkgs flags it
-            # meta.problems.removal. Stays on nix rather than npm because
-            # the `antigravity-cli` on npm is an unrelated v0.0.1 squat.
-            pkgs.antigravity-cli
             pkgs.btop
             pkgs.chezmoi
             pkgs._1password-cli
@@ -550,8 +571,8 @@
             # below (see npmGlobals / system.activationScripts.postActivation).
             # pi-coding-agent is installed via npm in the postActivation
             # script below (see system.activationScripts.postActivation).
-            # codex is also npm-managed (see npmGlobals) so it tracks
-            # upstream releases rather than the nixpkgs pin.
+            # Codex and Claude are npm-managed (see npmGlobals) so their
+            # native updaters can write to the user-owned global prefix.
 
             # CLI Clients
             pkgs.acli # Atlassian
@@ -609,7 +630,6 @@
               "docker-desktop"
               "chatgpt"
               "claude"
-              "codex-app"
               "tg-pro"
               "raindropio"
               "bartender"
@@ -746,6 +766,16 @@
                     # --- Global npm CLIs (declared in npmGlobals above) ---
                     ${pkgs.lib.concatMapStrings mkNpmGlobal npmGlobals}
 
+                    # npm harness updaters invoke `npm install -g`; direct that to their shared,
+                    # user-owned prefix rather than Nix's immutable store.
+                    sudo -u ${primaryUser} \
+                      HOME="${homeDir}" \
+                      PATH="${pkgs.nodejs}/bin:$PATH" \
+                      ${pkgs.nodejs}/bin/npm config set prefix \
+                        "${npmGlobalPrefix}" --location=user
+
+                    ${pkgs.lib.concatMapStrings mkSelfUpdatingHarness selfUpdatingHarnesses}
+
                     ${mkGraftSymlinks}
 
                     # --- Pi packages (declared in piPackages above) ---
@@ -758,9 +788,6 @@
                     ${mkFigmaMcp}
 
                     ${mkSynergy}
-
-                    # --- uv-tool CLIs (declared in uvTools above) ---
-                    ${pkgs.lib.concatMapStrings mkUvTool uvTools}
 
                     # --- Firecrawl repo + .env bootstrap ---
                     FIRECRAWL_DIR="${firecrawlDir}"

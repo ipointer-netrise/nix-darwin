@@ -9,8 +9,8 @@ Declarative macOS system configuration using [nix-darwin](https://github.com/nix
 - Sets up `/etc/gitconfig` to rewrite GitLab HTTPS URLs to SSH
 - Bootstraps `~/.config/1Password/ssh/agent.toml` for the correct vault
 - Configures system preferences (dock, keyboard layouts, Touch ID sudo, etc.)
-- Installs CLI tooling that isn't in nixpkgs via Homebrew taps (e.g. `aven`) and via
-  npm/uv activation scripts (see `npmGlobals` / `uvTools` in `flake.nix`)
+- Installs CLI tooling through Nix where available (including Hermes Agent), plus Homebrew taps
+  (e.g. `aven`), npm, and official user-level installers; harnesses retain their built-in update paths
 - Installs the `aven` coding-agent skill for Claude Code, OpenCode, Codex, Pi, and
   Hermes (the first four via `aven skill install`; Hermes by mirroring the generated
   file, since aven's installer doesn't know about it).
