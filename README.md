@@ -44,6 +44,8 @@ This will:
    ```
 4. Restore any data listed under [Data this repo does *not* carry](#data-this-repo-does-not-carry)
 
+See [Machine recovery exceptions](docs/machine-recovery-exceptions.md) for approved departures from declarative management and candidates awaiting confirmation.
+
 ## Data this repo does not carry
 
 `darwin-rebuild` reproduces *tools and configuration*, not *state*. These have to be

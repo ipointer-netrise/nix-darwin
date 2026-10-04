@@ -1,4 +1,4 @@
-.PHONY: apply update brew outdated up commit
+.PHONY: apply update brew outdated up commit validate-machine-skill recovery-check
 
 # ── Apply / update ────────────────────────────────────────────────────
 # `apply` rebuilds from the current flake.lock — reproducible, no network
@@ -31,6 +31,20 @@ outdated:
 	@brew outdated || true
 
 up: update apply brew
+
+# ── Machine recovery validation ───────────────────────────────────────
+
+validate-machine-skill:
+	@./scripts/validate-machine-skill.sh
+
+# Builds and renders only; it never switches a generation or runs chezmoi scripts.
+recovery-check: validate-machine-skill
+	@nix flake check --no-build --no-write-lock-file "/etc/nix-darwin"
+	@darwin-rebuild build --flake "/etc/nix-darwin#default"
+	@RECOVERY_DEST=$$(mktemp -d "$${TMPDIR:-/tmp}/chezmoi-recovery.XXXXXX"); \
+		trap 'rm -rf -- "$$RECOVERY_DEST"' EXIT; \
+		chezmoi apply --source "$$(chezmoi source-path)" --destination "$$RECOVERY_DEST" \
+			--dry-run --verbose --exclude=scripts --skip-secrets --refresh-externals=never
 
 # ── Commit ────────────────────────────────────────────────────────────
 
