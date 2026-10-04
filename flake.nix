@@ -320,41 +320,6 @@
             ln -sfn "${graftPkg}/lib/node_modules/@nanonets/graft" /usr/local/share/graft/module
           '';
 
-          mkSelfUpdatingHarness =
-            {
-              name,
-              bin,
-              marker,
-              installerUrl,
-              installerArgs ? "",
-            }:
-            let
-              argsSuffix = pkgs.lib.optionalString (installerArgs != "") " -s -- ${installerArgs}";
-            in
-            ''
-              # --- self-updating harness: ${name} ---
-              if [ ! -e "${marker}" ]; then
-                echo "Installing ${name}..."
-                sudo -u ${primaryUser} \
-                  HOME="${homeDir}" \
-                  PATH="${pkgs.curl}/bin:${pkgs.bash}/bin:/usr/local/bin:$PATH" \
-                  ${pkgs.bash}/bin/bash -c '${pkgs.curl}/bin/curl -fsSL ${installerUrl} | ${pkgs.bash}/bin/bash${argsSuffix}'
-              fi
-
-              mkdir -p /usr/local/bin
-              ln -sf "${homeDir}/.local/bin/${bin}" /usr/local/bin/${bin}
-            '';
-
-          selfUpdatingHarnesses = [
-            {
-              name = "Antigravity CLI";
-              bin = "agy";
-              marker = "${homeDir}/.local/bin/agy";
-              installerUrl = "https://antigravity.google/cli/install.sh";
-              installerArgs = "--dir ${homeDir}/.local/bin";
-            }
-          ];
-
           # ── Declarative pi-coding-agent packages ─────────────────────
           # Pi packages (extensions/skills/themes) are managed via
           # `pi install npm:<name>`, which records them in
@@ -642,6 +607,7 @@
               "docker-desktop"
               "chatgpt"
               "claude"
+              "antigravity-cli"
               "tg-pro"
               "raindropio"
               "bartender"
@@ -786,8 +752,6 @@
                       PATH="${pkgs.nodejs}/bin:$PATH" \
                       ${pkgs.nodejs}/bin/npm config set prefix \
                         "${npmGlobalPrefix}" --location=user
-
-                    ${pkgs.lib.concatMapStrings mkSelfUpdatingHarness selfUpdatingHarnesses}
 
                     ${mkGraftSymlinks}
 

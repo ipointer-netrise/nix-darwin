@@ -8,11 +8,11 @@ An entry needs user approval before it is accepted. Record its source location, 
 
 Project-state records the decision and review evidence, with a link here. It does not replace this version-controlled document during machine recovery.
 
-## Entries awaiting confirmation
+## Retired entries
 
-### EX-CAND-001: Antigravity CLI bootstrap installer
+### EX-001: Antigravity CLI bootstrap installer
 
-- Source: `flake.nix`, `mkSelfUpdatingHarness` and the Antigravity CLI entry.
-- Current behavior: activation runs the vendor installer only when `~/.local/bin/agy` is absent, then maintains a stable `/usr/local/bin/agy` link.
-- Why it needs review: it is an existing imperative installer and predates this registry.
-- Next action: obtain explicit user confirmation before treating it as an accepted exception or changing its behavior.
+- Status: retired on 2026-10-03 with explicit user approval.
+- Replacement: the official `antigravity-cli` Homebrew cask, which provides `agy` in the declared Homebrew path.
+- Migration verification: `/opt/homebrew/bin/agy` reported 1.2.14 after activation; the legacy `~/.local/bin/agy` and `/usr/local/bin/agy` paths were removed.
+- Recovery impact: first boot installs the cask through nix-darwin. Authentication and runtime state remain owned by Antigravity and the macOS Keychain.
