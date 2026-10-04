@@ -658,6 +658,7 @@
               "visual-studio-code"
               "cmux"
               "bettertouchtool"
+              "hammerspoon"
               "figma"
               "hex-fiend"
               "microsoft-office"
