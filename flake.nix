@@ -114,31 +114,6 @@
         };
       };
 
-      mkToastMonitorPkg = pkgs:
-        pkgs.stdenvNoCC.mkDerivation {
-          pname = "ToastMonitor";
-          version = "1.16.3";
-          src = pkgs.fetchurl {
-            url = "https://github.com/Toast1zz/ToastMonitor/releases/download/v1.16.3/ToastMonitor-1.16.3-arm64.zip";
-            hash = "sha256-RYj6y55VU4HAmam4/JtoGloUeLVBQB2fKm0zQDp5wgk=";
-          };
-
-          nativeBuildInputs = [ pkgs.unzip ];
-          unpackPhase = "unzip -qq $src";
-          installPhase = ''
-            mkdir -p "$out/Applications"
-            cp -R ToastMonitor.app "$out/Applications/"
-          '';
-
-          # Its signed bundle must not be altered; upgrades are managed by this flake.
-          dontFixup = true;
-
-          meta = {
-            description = "Native macOS menu-bar AI usage monitor";
-            platforms = [ "aarch64-darwin" ];
-          };
-        };
-
       mkMacXeneonEdgeTouchDriverPkg = pkgs:
         pkgs.stdenv.mkDerivation {
           pname = "mac-xeneon-edge-touch-driver";
@@ -175,7 +150,6 @@
         let
           primaryUser = "ivanpointer";
           homeDir = "/Users/${primaryUser}";
-          toastMonitorPkg = mkToastMonitorPkg pkgs;
           macXeneonEdgeTouchDriverPkg = mkMacXeneonEdgeTouchDriverPkg pkgs;
 
           # Locally packed tarballs that npmGlobals entries pin against. Not
@@ -475,7 +449,6 @@
           environment.systemPackages = [
             pkgs.python3
             graftPkg
-            toastMonitorPkg
             macXeneonEdgeTouchDriverPkg
 
             # tmux
