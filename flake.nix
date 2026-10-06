@@ -20,10 +20,6 @@
       flake = false;
     };
 
-    mac-xeneon-edge-touch-driver = {
-      url = "github:ajvwhite/MacXeneonEdgeTouchDriver/main";
-      flake = false;
-    };
   };
 
   outputs =
@@ -32,7 +28,6 @@
       nix-darwin,
       nixpkgs,
       graft-src,
-      mac-xeneon-edge-touch-driver,
       hermes-agent,
     }:
     let
@@ -114,43 +109,11 @@
         };
       };
 
-      mkMacXeneonEdgeTouchDriverPkg = pkgs:
-        pkgs.stdenv.mkDerivation {
-          pname = "mac-xeneon-edge-touch-driver";
-          version = "unstable";
-          src = inputs.mac-xeneon-edge-touch-driver;
-
-          nativeBuildInputs = [ pkgs.swift pkgs.swiftpm ];
-
-          buildPhase = ''
-            runHook preBuild
-            swift build --configuration release --disable-sandbox --scratch-path "$TMPDIR/swift-build"
-            runHook postBuild
-          '';
-
-          installPhase = ''
-            runHook preInstall
-            install -Dm755 "$TMPDIR/swift-build/release/MacXeneonEdgeTouchDriver" \
-              "$out/bin/MacXeneonEdgeTouchDriver"
-            install -Dm755 "$TMPDIR/swift-build/release/DisplayInfo" "$out/bin/DisplayInfo"
-            install -Dm755 "$TMPDIR/swift-build/release/HIDDump" "$out/bin/HIDDump"
-            runHook postInstall
-          '';
-
-          meta = {
-            description = "User-space macOS touch driver for the Corsair Xeneon Edge";
-            homepage = "https://github.com/ajvwhite/MacXeneonEdgeTouchDriver";
-            license = pkgs.lib.licenses.mit;
-            platforms = [ "aarch64-darwin" ];
-          };
-        };
-
       configuration =
         { pkgs, config, ... }:
         let
           primaryUser = "ivanpointer";
           homeDir = "/Users/${primaryUser}";
-          macXeneonEdgeTouchDriverPkg = mkMacXeneonEdgeTouchDriverPkg pkgs;
 
           # Locally packed tarballs that npmGlobals entries pin against. Not
           # tracked by any repo -- `npm pack` regenerates them from the source
@@ -449,7 +412,6 @@
           environment.systemPackages = [
             pkgs.python3
             graftPkg
-            macXeneonEdgeTouchDriverPkg
 
             # tmux
             pkgs.tmux
@@ -792,23 +754,6 @@
             };
           };
 
-          # The driver reads the Edge's HID digitizer and emits ordinary macOS pointer events.
-          # It must run per-user: Input Monitoring and Accessibility approval are scoped to this binary.
-          launchd.user.agents.mac-xeneon-edge-touch-driver = {
-            serviceConfig = {
-              Label = "com.ajvwhite.MacXeneonEdgeTouchDriver";
-              ProgramArguments = [ "${macXeneonEdgeTouchDriverPkg}/bin/MacXeneonEdgeTouchDriver" ];
-              RunAtLoad = true;
-              KeepAlive = {
-                SuccessfulExit = false;
-                Crashed = true;
-              };
-              ThrottleInterval = 10;
-              StandardOutPath = "${homeDir}/Library/Logs/MacXeneonEdgeTouchDriver/stdout.log";
-              StandardErrorPath = "${homeDir}/Library/Logs/MacXeneonEdgeTouchDriver/stderr.log";
-            };
-          };
-
           # macmon-exporter: Apple Silicon GPU/CPU/temp/power → Prometheus text
           # on :9101. Prometheus scrapes it via host.docker.internal:9101.
           # Reads IOReport without sudo (same interface btop uses). See ADR 0013.
@@ -895,10 +840,6 @@
 
               echo "Installed bundle to: $DVORAK_DST_BUNDLE"
               ls -la "$DVORAK_DST_BUNDLE"
-
-              # --- Mac Xeneon Edge touch driver logs ---
-              XENEON_LOG_DIR="${homeDir}/Library/Logs/MacXeneonEdgeTouchDriver"
-              install -d -o ${primaryUser} -g staff "$XENEON_LOG_DIR"
               '';
 
           # https://nix-darwin.github.io/nix-darwin/manual/
@@ -1024,10 +965,9 @@
         let
           pkgs = nixpkgs.legacyPackages.aarch64-darwin;
           graft = mkGraftPkg pkgs;
-          macXeneonEdgeTouchDriver = mkMacXeneonEdgeTouchDriverPkg pkgs;
         in
         {
-          inherit graft macXeneonEdgeTouchDriver;
+          inherit graft;
           default = graft;
           graft-claude-dir = pkgs.runCommand "graft-claude-dir" { } ''
             ln -s ${graft}/lib/node_modules/@nanonets/graft/dist/claude $out
