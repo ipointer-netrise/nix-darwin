@@ -8,6 +8,18 @@ An entry needs user approval before it is accepted. Record its source location, 
 
 Project-state records the decision and review evidence, with a link here. It does not replace this version-controlled document during machine recovery.
 
+## Active entries
+
+### EX-002: XENEON local development signing identity
+
+- Source: login Keychain certificate `XENEON Local Development Signing`; its private key is intentionally not exported or versioned.
+- Rationale: preserve macOS Accessibility authorization when the local companion bundle is rebuilt.
+- Approval: Ivan Pointer explicitly approved creation on 2026-10-06.
+- Idempotence guard: the companion packaging script selects this named identity and fails clearly if it is absent.
+- Safe test: package the companion, inspect its designated requirement, relaunch it, then verify the control socket reports Accessibility as ready.
+- Recovery impact: recreate this local certificate and renew the Accessibility grant after a machine replacement; no secret belongs in the repository.
+- Review trigger: replace this exception when a managed developer signing identity or distribution process exists, or before certificate expiry.
+
 ## Retired entries
 
 ### EX-001: Antigravity CLI bootstrap installer
