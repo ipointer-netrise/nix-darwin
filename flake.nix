@@ -571,6 +571,7 @@
               "openchamber"
               "jetbrains-toolbox"
               "todoist-app"
+              "asana"
               "zen"
               "blender"
               "discord"
